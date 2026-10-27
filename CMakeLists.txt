@@ -1,6 +1,9 @@
 # Cross-platform (macOS/Linux) build. The Windows build still uses RALibretro.sln / Makefile.
 cmake_minimum_required(VERSION 3.20)
 project(RALibretro C CXX)
+if(APPLE)
+  enable_language(OBJC OBJCXX) # wxWidgets (the toolkit's windows) has Objective-C++ sources
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +37,8 @@ if(NOT EXISTS "${RA_INTEGRATION_DIR}/CMakeLists.txt")
   message(FATAL_ERROR "RAIntegration not found at ${RA_INTEGRATION_DIR}; set RA_INTEGRATION_DIR")
 endif()
 set(RA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+# the toolkit's windows are native wxWidgets windows (built from RAIntegration's wxWidgets submodule)
+set(RA_BUILD_WX_UI ON CACHE BOOL "" FORCE)
 add_subdirectory("${RA_INTEGRATION_DIR}" RAIntegration EXCLUDE_FROM_ALL)
 
 # ---- generated version header ----------------------------------------------------------------
@@ -134,7 +139,7 @@ target_include_directories(RALibretro BEFORE PRIVATE
 )
 target_compile_definitions(RALibretro PRIVATE
   OUTSIDE_SPEEX RANDOM_PREFIX=speex EXPORT= FIXED_POINT HAVE_CHD LOG_TO_FILE)
-target_link_libraries(RALibretro PRIVATE RAIntegrationImGui chdr imgui nfd SDL2::SDL2 OpenGL::GL ${CMAKE_DL_LIBS})
+target_link_libraries(RALibretro PRIVATE RAIntegrationWx chdr imgui nfd SDL2::SDL2 OpenGL::GL ${CMAKE_DL_LIBS})
 
 if(APPLE)
   # OpenGL is deprecated (but available) on macOS
