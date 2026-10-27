@@ -162,10 +162,13 @@ void gui::render()
     Modal* modal = s_modals[i];
     const bool interactive = (i + 1 == s_modals.size());
 
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetWorkCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    // on Windows dialogs are separate windows; here they must fit in the main window, so large ones scroll
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(viewport->WorkSize.x, viewport->WorkSize.y));
     ImGui::BeginDisabled(!interactive);
     const ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse |
-                                   ImGuiWindowFlags_NoSavedSettings;
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_HorizontalScrollbar;
     bool open = true;
     if (ImGui::Begin(modal->title.c_str(), interactive ? &open : nullptr, flags))
     {
@@ -191,7 +194,8 @@ void gui::render()
 }
 
 bool gui::runModal(const char* title, const std::function<bool()>& draw,
-                   const std::function<bool(const SDL_Event&)>& onEvent)
+                   const std::function<bool(const SDL_Event&)>& onEvent,
+                   const std::function<bool()>& afterFrame)
 {
   if (!s_initialized)
     return true;
@@ -222,6 +226,9 @@ bool gui::runModal(const char* title, const std::function<bool()>& draw,
 
     if (s_redraw)
       s_redraw();
+
+    if (modal.open && afterFrame && !afterFrame())
+      modal.open = false;
 
     SDL_Delay(16);
   }

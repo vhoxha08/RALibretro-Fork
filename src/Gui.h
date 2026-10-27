@@ -50,8 +50,11 @@ namespace gui
 
   // Runs a modal window until draw returns false. draw is called between Begin/End of the window; onEvent
   // sees every SDL event first and returns true to consume it. Returns false if the application is quitting.
+  // afterFrame runs once each frame has been drawn (outside the ImGui frame, so it may open another modal)
+  // and returns false to close the window.
   bool runModal(const char* title, const std::function<bool()>& draw,
-                const std::function<bool(const SDL_Event&)>& onEvent = nullptr);
+                const std::function<bool(const SDL_Event&)>& onEvent = nullptr,
+                const std::function<bool()>& afterFrame = nullptr);
   bool isModalActive();
 }
 

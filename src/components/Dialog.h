@@ -105,6 +105,7 @@ protected:
   virtual void markClosed() {}
 
   void render();
+  bool processPendingInput();
 
   std::string _title;
   WORD _width = 0;
@@ -113,6 +114,8 @@ protected:
   bool _updated = false;
   bool _closed = false;
   DWORD _result = 0;
+  DWORD _pendingClick = 0;  // handled after the GUI frame (it may open another dialog)
+  DWORD _pendingChange = 0;
 };
 
 #else

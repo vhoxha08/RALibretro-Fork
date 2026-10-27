@@ -28,6 +28,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <jsonsax/jsonsax.h>
 
 #include <SDL_hints.h>
+#include <SDL_timer.h>
 #include <SDL_keycode.h>
 
 #define MODIFIERS (KMOD_MODE | KMOD_CTRL | KMOD_SHIFT | KMOD_ALT | KMOD_GUI)
@@ -1691,6 +1692,159 @@ protected:
   }
 };
 
+#else // !_WIN32
+
+// ImGui version of the "press a key or button" dialog: keys arrive as SDL events while the dialog runs its
+// own loop, controllers are polled like the Win32 version's timer does.
+class ChangeInputDialog : public Dialog
+{
+public:
+  static const WORD ID_LABEL = 40000;
+  static const WORD IDC_CLEAR = 50000;
+
+  const KeyBinds::Binding getButtonDescriptor() const { return _buttonDescriptor; }
+
+  Input* _input = nullptr;
+  std::map<SDL_JoystickID, SDL_JoystickID>* _bindingMap = nullptr;
+  KeyBinds::BindingList* _bindings = nullptr;
+  KeyBinds::Action _button = KeyBinds::Action::kNothing;
+
+  bool show(HWND)
+  {
+    _buttonDescriptor = _bindings->at(static_cast<int>(_button));
+    return Dialog::show();
+  }
+
+protected:
+  KeyBinds::Binding _buttonDescriptor;
+  Uint32 _lastPoll = 0;
+
+  void initControls() override
+  {
+    Dialog::initControls();
+    updateBindingString();
+  }
+
+  void retrieveData() override
+  {
+    Dialog::retrieveData();
+
+    // _updated is normally only set if a field changes, since this dialog has no fields,
+    // always return "modified" if the user didn't cancel the dialog.
+    _updated = true;
+  }
+
+  bool onEvent(const SDL_Event& event) override
+  {
+    if (event.type == SDL_KEYUP || event.type == SDL_TEXTINPUT)
+      return true;
+
+    if (event.type != SDL_KEYDOWN)
+      return false;
+
+    // like the Win32 version, every key (including Enter and Escape) becomes the new binding
+    switch (event.key.keysym.sym)
+    {
+      case SDLK_UNKNOWN:
+      case SDLK_LALT:
+      case SDLK_RALT:
+      case SDLK_LCTRL:
+      case SDLK_RCTRL:
+      case SDLK_LSHIFT:
+      case SDLK_RSHIFT:
+      case SDLK_LGUI:
+      case SDLK_RGUI:
+        // don't allow modifiers by themselves
+        break;
+
+      default:
+        _buttonDescriptor.type = KeyBinds::Binding::Key;
+        _buttonDescriptor.joystick_id = -1;
+        _buttonDescriptor.button = event.key.keysym.sym;
+        _buttonDescriptor.modifiers = 0;
+
+        if (event.key.keysym.mod & KMOD_CTRL)
+          _buttonDescriptor.modifiers |= KMOD_CTRL;
+        if (event.key.keysym.mod & KMOD_ALT)
+          _buttonDescriptor.modifiers |= KMOD_ALT;
+        if (event.key.keysym.mod & KMOD_SHIFT)
+          _buttonDescriptor.modifiers |= KMOD_SHIFT;
+
+        updateBindingString();
+        break;
+    }
+
+    return true;
+  }
+
+  void onFrame() override
+  {
+    const Uint32 now = SDL_GetTicks();
+    if (now - _lastPoll < 100)
+      return;
+    _lastPoll = now;
+
+    KeyBinds::Binding button = _input->captureButtonPress();
+    if (button.type != KeyBinds::Binding::Type::None)
+    {
+      _buttonDescriptor = button;
+
+      auto pair = _bindingMap->find(button.joystick_id);
+      if (pair != _bindingMap->end())
+        _buttonDescriptor.joystick_id = pair->second;
+
+      updateBindingString();
+    }
+  }
+
+  bool onButton(DWORD id) override
+  {
+    if (id != IDC_CLEAR)
+      return false;
+
+    _buttonDescriptor.joystick_id = 0;
+    _buttonDescriptor.type = KeyBinds::Binding::Type::None;
+    _buttonDescriptor.button = 0;
+    _buttonDescriptor.modifiers = 0;
+
+    updateBindingString();
+    return true;
+  }
+
+  void updateBindingString()
+  {
+    char buffer[32];
+    KeyBinds::getBindingString(buffer, _buttonDescriptor);
+
+    if (_buttonDescriptor.type != KeyBinds::Binding::Type::None)
+    {
+      for (size_t i = 0; i < _bindings->size(); ++i)
+      {
+        if (i == static_cast<size_t>(_button))
+          continue;
+
+        const KeyBinds::Binding& binding = _bindings->at(i);
+        if (binding.button == _buttonDescriptor.button &&
+          binding.modifiers == _buttonDescriptor.modifiers &&
+          binding.type == _buttonDescriptor.type)
+        {
+          if (binding.type == KeyBinds::Binding::Type::Key || binding.joystick_id == _buttonDescriptor.joystick_id)
+          {
+            std::string sMessage = buffer;
+            sMessage.append("\nWARNING: Multiple bindings");
+            setControlText(ID_LABEL, sMessage);
+            return;
+          }
+        }
+      }
+    }
+
+    setControlText(ID_LABEL, buffer);
+  }
+};
+
+#endif // _WIN32
+
 class InputDialog : public Dialog
 {
 public:
@@ -1809,6 +1963,7 @@ protected:
   static const WORD IDC_IMPORT = IDC_EXPORT - 1;
   static const WORD IDC_CLEAR = IDC_IMPORT - 1;
 
+#ifdef _WIN32
   void retrieveData(HWND hwnd) override
   {
     Dialog::retrieveData(hwnd);
@@ -1817,6 +1972,44 @@ protected:
     // always return "modified" if the user didn't cancel the dialog.
     _updated = true;
   }
+
+  void getItemText(HWND hwnd, int id, char* buffer, int size) { GetDlgItemText(hwnd, id, buffer, size); }
+  void setItemText(HWND hwnd, int id, const char* text) { SetDlgItemText(hwnd, id, text); }
+#else
+  void retrieveData() override
+  {
+    Dialog::retrieveData();
+
+    // _updated is normally only set if a field changes, since this dialog has no fields,
+    // always return "modified" if the user didn't cancel the dialog.
+    _updated = true;
+  }
+
+  void getItemText(HWND, int id, char* buffer, int size)
+  {
+    const ControlData* cd = findControl(id);
+    const std::string& text = cd ? (cd->_type == kEditbox ? cd->_text : cd->_caption) : std::string();
+    snprintf(buffer, size, "%s", text.c_str());
+  }
+
+  void setItemText(HWND, int id, const char* text) { setControlText(id, text); }
+
+  bool onButton(DWORD controlId) override
+  {
+    if (controlId >= 20000 && controlId <= 20000 + kMaxBindings)
+      updateButton(nullptr, controlId - 20000);
+    else if (controlId == IDC_EXPORT)
+      exportJson(nullptr);
+    else if (controlId == IDC_IMPORT)
+      importJson(nullptr);
+    else if (controlId == IDC_CLEAR)
+      clear(nullptr);
+    else
+      return false;
+
+    return true;
+  }
+#endif
 
   void updateButtonLabel(int button)
   {
@@ -1838,6 +2031,7 @@ protected:
     addEditbox(10000 + button, x, y + ITEM_HEIGHT, ITEM_WIDTH - 6, ITEM_HEIGHT, 1, _buttonLabels[button], 16, true);
   }
 
+#ifdef _WIN32
   INT_PTR dialogProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) override
   {
     switch (msg)
@@ -1859,11 +2053,12 @@ protected:
 
     return Dialog::dialogProc(hwnd, msg, wparam, lparam);
   }
+#endif
 
   void updateButton(HWND hwnd, int button)
   {
     char buffer[32];
-    GetDlgItemText(hwnd, 20000 + button, buffer, sizeof(buffer));
+    getItemText(hwnd, 20000 + button, buffer, sizeof(buffer));
 
     ChangeInputDialog db;
     db.init(buffer);
@@ -1872,7 +2067,7 @@ protected:
     db._bindings = &_bindings;
     db._button = static_cast<KeyBinds::Action>(button);
 
-    GetDlgItemText(hwnd, 10000 + button, buffer, sizeof(buffer));
+    getItemText(hwnd, 10000 + button, buffer, sizeof(buffer));
     db.addLabel(buffer, ChangeInputDialog::ID_LABEL, 0, 0, 200, 18);
 
     db.addButton("Clear", ChangeInputDialog::IDC_CLEAR, 0, 20, 50, 14, false);
@@ -1887,7 +2082,7 @@ protected:
     {
       _bindings[button] = db.getButtonDescriptor();
       updateButtonLabel(button);
-      SetDlgItemText(hwnd, 10000 + button, _buttonLabels[button]);
+      setItemText(hwnd, 10000 + button, _buttonLabels[button]);
     }
 
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "0");
@@ -1966,7 +2161,7 @@ protected:
               const int button = ud->dialog->_firstBinding + i;
               parseBindingString(util::jsonUnescape(std::string(str, num)), ud->dialog->_bindings[button]);
               ud->dialog->updateButtonLabel(button);
-              SetDlgItemText(ud->hwnd, 10000 + button, ud->dialog->_buttonLabels[button]);
+              ud->dialog->setItemText(ud->hwnd, 10000 + button, ud->dialog->_buttonLabels[button]);
             }
           }
         }
@@ -1983,7 +2178,7 @@ protected:
       const int button = _firstBinding + i;
       parseBindingString("none", _bindings[button]);
       updateButtonLabel(button);
-      SetDlgItemText(hwnd, 10000 + button, _buttonLabels[button]);
+      setItemText(hwnd, 10000 + button, _buttonLabels[button]);
     }
   }
 };
@@ -2034,19 +2229,3 @@ void KeyBinds::showHotKeyDialog(Input& input)
     _bindings = db.getBindings();
 }
 
-#else // !_WIN32
-
-// TODO: ImGui versions of the controller and hot key dialogs
-void KeyBinds::showControllerDialog(Input& input, int port)
-{
-  (void)input;
-  _logger->warn("[KEY] Controller %d settings dialog is not available yet", port + 1);
-}
-
-void KeyBinds::showHotKeyDialog(Input& input)
-{
-  (void)input;
-  _logger->warn("[KEY] Hot key settings dialog is not available yet");
-}
-
-#endif // _WIN32

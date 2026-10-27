@@ -334,6 +334,19 @@ void Dialog::render()
     }
   }
 
+  // acted upon in processPendingInput, after the frame is complete
+  if (changed != 0)
+    _pendingChange = changed;
+  if (clicked != 0)
+    _pendingClick = clicked;
+}
+
+bool Dialog::processPendingInput()
+{
+  const DWORD changed = _pendingChange;
+  const DWORD clicked = _pendingClick;
+  _pendingChange = _pendingClick = 0;
+
   if (changed != 0)
     onSelectionChanged(changed);
 
@@ -350,6 +363,11 @@ void Dialog::render()
   {
     onButton(clicked);
   }
+
+  if (!_closed)
+    onFrame();
+
+  return !_closed;
 }
 
 bool Dialog::show()
@@ -365,15 +383,15 @@ bool Dialog::show()
   _result = 0;
   initControls();
 
+  _pendingClick = _pendingChange = 0;
   gui::runModal(_title.c_str(),
     [this]()
     {
       render();
-      if (!_closed)
-        onFrame();
       return !_closed;
     },
-    [this](const SDL_Event& event) { return onEvent(event); });
+    [this](const SDL_Event& event) { return onEvent(event); },
+    [this]() { return processPendingInput(); });
 
   markClosed();
 
