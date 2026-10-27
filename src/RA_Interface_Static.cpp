@@ -146,3 +146,10 @@ void RA_SetModalLoopHandler(void (*runModalLoop)(int (*isOpen)(void*), void* dat
 {
     _RA_SetModalLoopHandler(runModalLoop);
 }
+
+void RA_SetTextureHandlers(uintptr_t (*createFromFile)(const char*, int*, int*),
+                           uintptr_t (*createFromPixels)(const uint32_t*, int, int),
+                           void (*destroy)(uintptr_t))
+{
+    _RA_SetTextureHandlers(createFromFile, createFromPixels, destroy);
+}

@@ -26,6 +26,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
 
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -101,6 +102,26 @@ bool gui::init(SDL_Window* window, SDL_GLContext glContext)
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
   ImGui::StyleColorsDark();
+
+  // ImGui's built-in font only covers ASCII. Merge system fonts as fallbacks for the symbols the toolkit uses
+  // (i.e. the controller button glyphs in the overlay); ImGui 1.92 loads their glyphs on demand.
+  io.Fonts->AddFontDefault();
+  static const char* const fallbackFonts[] = {
+    "/System/Library/Fonts/Apple Symbols.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf",
+  };
+  for (const char* path : fallbackFonts)
+  {
+    if (FILE* file = fopen(path, "rb"))
+    {
+      fclose(file);
+      ImFontConfig config;
+      config.MergeMode = true;
+      io.Fonts->AddFontFromFileTTF(path, 0.0f, &config); // size follows the font it is merged into
+    }
+  }
 
   if (!ImGui_ImplSDL2_InitForOpenGL(window, glContext))
     return false;

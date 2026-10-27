@@ -148,3 +148,9 @@ add_custom_command(TARGET RALibretro POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/etc/cores.json
           $<TARGET_FILE_DIR:RALibretro>/Cores/cores.json
 )
+
+# The toolkit's overlay images and sounds (copied next to RA_Integration.dll on Windows)
+add_custom_command(TARGET RALibretro POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${RA_INTEGRATION_DIR}/RAInterface/overlay
+          $<TARGET_FILE_DIR:RALibretro>/Overlay
+)

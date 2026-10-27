@@ -23,6 +23,8 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 // On Windows the toolkit DLL owns a Win32 UI thread and does these things itself.
 #ifndef _WIN32
 
+#include <stdint.h>
+
 // Directory for RACache, Overlay and RAPrefs. Call before RA_Init.
 void RA_SetBaseDirectory(const char* utf8Path);
 
@@ -40,5 +42,10 @@ void RA_RenderImGui(void);
 
 // How the toolkit's modal windows block: runModalLoop must pump events and redraw until isOpen(data) returns 0.
 void RA_SetModalLoopHandler(void (*runModalLoop)(int (*isOpen)(void*), void* data));
+
+// Textures for the toolkit's images: ImTextureIDs of the host's ImGui renderer (0 = failure). Pixels are ARGB.
+void RA_SetTextureHandlers(uintptr_t (*createFromFile)(const char* utf8Path, int* width, int* height),
+                           uintptr_t (*createFromPixels)(const uint32_t* argb, int width, int height),
+                           void (*destroy)(uintptr_t texture));
 
 #endif

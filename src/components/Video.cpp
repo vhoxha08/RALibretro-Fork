@@ -201,9 +201,10 @@ void Video::redraw()
 
 void Video::draw(bool force)
 {
-  if (_texture == 0 && _overlayRenderer)
+  // nothing to show yet (no texture, or no vertex array until the first frame arrives - modal windows can
+  // redraw while a game is loading), but the overlay (menu, dialogs) still has to be drawn
+  if ((_texture == 0 || _vertexArray == 0) && _overlayRenderer)
   {
-    // nothing to show yet, but the overlay (menu) still has to be drawn
     Gl::bindFramebuffer(GL_FRAMEBUFFER, 0);
     Gl::clearColor(0.0, 0.0, 0.0, 1.0);
     Gl::clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
