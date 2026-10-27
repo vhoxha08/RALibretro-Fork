@@ -36,6 +36,10 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <share.h>
 #else
 #include <dirent.h>
+#ifndef _CONSOLE
+#include <curl/curl.h>
+#endif
+#include <filesystem>
 #endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -352,6 +356,7 @@ void util::deleteFile(const std::string& path)
 }
 
 #ifndef _CONSOLE // don't include in RAHasher
+#ifdef _WINDOWS
 bool util::downloadFile(Logger* logger, const std::string& url, const std::string& path)
 {
   bool bSuccess = false;
@@ -468,6 +473,56 @@ bool util::downloadFile(Logger* logger, const std::string& url, const std::strin
 
   return bSuccess;
 }
+#else
+static size_t writeToFile(char* data, size_t size, size_t count, void* udata)
+{
+  return fwrite(data, size, count, static_cast<FILE*>(udata));
+}
+
+bool util::downloadFile(Logger* logger, const std::string& url, const std::string& path)
+{
+  CURL* curl = curl_easy_init();
+  if (curl == nullptr)
+  {
+    logger->error(TAG "Could not initialize libcurl");
+    return false;
+  }
+
+  FILE* file = util::openFile(logger, path, "wb");
+  if (file == NULL)
+  {
+    /* openFile will log an error */
+    curl_easy_cleanup(curl);
+    return false;
+  }
+
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_USERAGENT, "RALibRetro");
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeToFile);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+
+  const CURLcode result = curl_easy_perform(curl);
+  long statusCode = 0;
+  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &statusCode);
+  curl_easy_cleanup(curl);
+  fclose(file);
+
+  if (result != CURLE_OK)
+  {
+    logger->error(TAG "Error downloading %s: %s", url.c_str(), curl_easy_strerror(result));
+    return false;
+  }
+
+  if (statusCode < 200 || statusCode >= 300)
+  {
+    logger->error(TAG "Error downloading %s: HTTP %ld", url.c_str(), statusCode);
+    return false;
+  }
+
+  return true;
+}
+#endif
 #endif
 
 std::string util::jsonEscape(const std::string& str)
@@ -665,6 +720,13 @@ void util::ensureDirectoryExists(const std::string& directory)
   }
 }
 
+#elif !defined(_CONSOLE)
+void util::ensureDirectoryExists(const std::string& directory)
+{
+  std::error_code ec;
+  std::filesystem::create_directories(directory, ec);
+}
+
 #endif
 
 #if defined(_WINDOWS)
@@ -787,6 +849,17 @@ std::string util::saveFileDialog(HWND hWnd, const std::string& extensionsFilter,
     return util::ucharToUtf8(path);
 
   return "";
+}
+#elif !defined(_CONSOLE)
+// TODO: native file dialogs (nativefiledialog-extended)
+std::string util::openFileDialog(HWND, const std::string&, const std::string&)
+{
+  return std::string();
+}
+
+std::string util::saveFileDialog(HWND, const std::string&, const char*, const std::string&)
+{
+  return std::string();
 }
 #endif
 

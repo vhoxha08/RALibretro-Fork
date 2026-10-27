@@ -19,7 +19,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
-#ifdef _WINDOWS
+#if defined(_WINDOWS) || !defined(_CONSOLE)
  #include "components/Input.h"
 #endif
 
@@ -85,7 +85,7 @@ public:
   std::string serializeEmulatorSettings() const;
   bool deserializeEmulatorSettings(const char* json);
 
-#ifdef _WINDOWS
+#if defined(_WINDOWS) || !defined(_CONSOLE)
   void showDialog(const std::string& coreName, Input& input, int console_id);
   void showEmulatorSettingsDialog();
 #endif
@@ -114,6 +114,7 @@ protected:
     std::vector<std::string> _labels;
   };
 
+#ifdef _WINDOWS
   class ConfigDialog : public Dialog
   {
   public:
@@ -135,6 +136,7 @@ protected:
 
     HWND hwnd;
   };
+#endif
 
   static void initializeControllerVariable(Variable& variable, const char* name, const char* key, const std::map<std::string, unsigned>& names, unsigned selectedDevice);
   void setOptions(Variable& var, const retro_core_option_value* values, const char* default_value);

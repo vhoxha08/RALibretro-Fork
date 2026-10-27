@@ -21,6 +21,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifdef LOG_TO_FILE
 #include "Util.h"
+#include "Platform.h"
 #include <chrono>
 #endif
 

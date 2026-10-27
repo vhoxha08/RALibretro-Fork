@@ -19,8 +19,100 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "Platform.h"
+#include <string>
+#endif
 #include <vector>
+
+#ifndef _WIN32
+
+// Same API as the Win32 Dialog below. The controls are recorded and shown as a modal ImGui window
+// (DialogImGui.cpp). Subclasses customize behavior through the hooks below instead of a Win32 dialogProc.
+class Dialog
+{
+public:
+  typedef const char* (*GetOption)(int index, void* udata);
+
+  Dialog();
+  virtual ~Dialog();
+
+  void init(const char* title);
+  void addCheckbox(const char* caption, DWORD id, WORD x, WORD y, WORD w, WORD h, bool* checked);
+  void addLabel(const char* caption, WORD x, WORD y, WORD w, WORD h);
+  void addLabel(const char* caption, DWORD id, WORD x, WORD y, WORD w, WORD h);
+  void addButton(const char* caption, DWORD id, WORD x, WORD y, WORD w, WORD h, bool isDefault);
+  void addCombobox(DWORD id, WORD x, WORD y, WORD w, WORD h, WORD maxDropDownHeight, GetOption get_option, void* udata, int* selected);
+  void addEditbox(DWORD id, WORD x, WORD y, WORD w, WORD h, WORD lines, char* contents, size_t maxSize, bool readOnly);
+
+  // Runs the dialog modally. Returns true if OK was pressed and a checkbox or combobox changed.
+  bool show();
+
+protected:
+  enum Type
+  {
+    kCheckbox,
+    kCombobox,
+    kEditbox,
+    kLabel,
+    kButton
+  };
+
+  struct ControlData
+  {
+    Type _type;
+    DWORD _id;
+    std::string _caption;
+    WORD _x, _y, _w, _h;
+    bool _isDefault = false;
+
+    bool* _checked = nullptr;
+    GetOption _getOption = nullptr;
+    void* _udata = nullptr;
+    int* _selected = nullptr;
+    WORD _maxDropDownHeight = 0;
+    char* _contents = nullptr;
+    size_t _maxSize = 0;
+    WORD _lines = 1;
+    bool _readOnly = false;
+
+    // values while the dialog is open (copied back by retrieveData)
+    bool _checkedValue = false;
+    int _selectedValue = 0;
+    std::vector<std::string> _options;
+    std::string _text;
+  };
+
+  ControlData* findControl(DWORD id);
+  void setControlText(DWORD id, const std::string& text);
+  void close(DWORD result);
+
+  // copies the bound values into the controls when the dialog opens
+  virtual void initControls();
+  // copies the control values back to the bound variables when OK is pressed
+  virtual void retrieveData();
+  // called for buttons other than OK/Cancel; return true if handled
+  virtual bool onButton(DWORD id) { (void)id; return false; }
+  // called for each SDL event while the dialog is open; return true to consume it
+  virtual bool onEvent(const union SDL_Event& event) { (void)event; return false; }
+  // called once per frame while the dialog is open
+  virtual void onFrame() {}
+  virtual void markClosed() {}
+
+  void render();
+
+  std::string _title;
+  WORD _width = 0;
+  WORD _height = 0;
+  std::vector<ControlData> _controlData;
+  bool _updated = false;
+  bool _closed = false;
+  DWORD _result = 0;
+};
+
+#else
 
 class Dialog
 {
@@ -105,3 +197,5 @@ protected:
   std::vector<ControlData> _controlData;
   bool _updated;
 };
+
+#endif // _WIN32

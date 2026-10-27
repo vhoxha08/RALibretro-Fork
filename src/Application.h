@@ -26,6 +26,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include "Fsm.h"
 
 #include <RA_Interface.h>
+#include "Platform.h"
 
 #include "components/Allocator.h"
 #include "components/Audio.h"
@@ -116,7 +117,10 @@ protected:
   void        resizeWindow(unsigned multiplier);
   void        resizeWindow(int width, int height);
   void        toggleFullscreen();
+#ifdef _WIN32
   void        handle(const SDL_SysWMEvent* syswm);
+#endif
+  void        handleCommand(unsigned cmd);
   void        handle(const SDL_WindowEvent* window);
   void        handle(const SDL_MouseMotionEvent* motion);
   void        handle(const SDL_MouseButtonEvent* button);
@@ -181,6 +185,9 @@ protected:
 
   HMENU _menu;
   HMENU _cdRomMenu;
+#ifndef _WIN32
+  bool _fastForwardChecked = false; // the Windows build keeps this in the Turbo menu item
+#endif
 
   int _absViewMouseX;
   int _absViewMouseY;

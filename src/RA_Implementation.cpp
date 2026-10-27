@@ -2,7 +2,11 @@
 
 #include "RA_Emulators.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "Platform.h"
+#endif
 
 #include "RA_BuildVer.h"
 
@@ -10,12 +14,13 @@ extern HWND g_mainWindow;
 
 bool isGameActive();
 void getGameName(char name[], size_t len);
-void pause();
+void pauseEmulation();
 void resume();
 void reset();
 void loadROM(const char* path);
 
 
+#ifdef _WIN32
 // returns -1 if not found
 int GetMenuItemIndex(HMENU hMenu, const char* ItemName)
 {
@@ -34,6 +39,7 @@ int GetMenuItemIndex(HMENU hMenu, const char* ItemName)
 
   return -1;
 }
+#endif
 
 
 //  Return whether a game has been loaded. Should return FALSE if
@@ -53,13 +59,14 @@ void CauseUnpause()
 //  Perform whatever action is required to Pause emulation.
 void CausePause()
 {
-  pause();
+  pauseEmulation();
 }
 
 
 //  Perform whatever function in the case of needing to rebuild the menu.
 void RebuildMenu()
 {
+#ifdef _WIN32
   HMENU mainMenu = GetMenu(g_mainWindow);
   if (!mainMenu) return;
   
@@ -72,6 +79,9 @@ void RebuildMenu()
   AppendMenu(mainMenu, MF_POPUP | MF_STRING, (UINT_PTR)RA_CreatePopupMenu(), TEXT("&RetroAchievements"));
   InvalidateRect(g_mainWindow, NULL, TRUE);
   DrawMenuBar(g_mainWindow);
+#else
+  // the ImGui menu bar asks the integration for its items every time it is drawn
+#endif
 }
 
 

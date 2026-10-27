@@ -31,8 +31,9 @@ SOFTWARE.
 #include <string.h>
 #include <algorithm>
 
-#ifdef _WINDOWS
 #include <RA_Interface.h>
+#include "Platform.h"
+#ifdef _WINDOWS
 #include <io.h>
 #endif
 
@@ -961,7 +962,7 @@ bool libretro::Core::getDiscPath(unsigned index, std::string& path) const
 
 bool libretro::Core::getVfsInterface(struct retro_vfs_interface_info* data)
 {
-  _logger->debug(TAG "Unimplemented env call: %s", name);
+  _logger->debug(TAG "Unimplemented env call: %s", "RETRO_ENVIRONMENT_GET_VFS_INTERFACE");
   return false;
 }
 
@@ -2372,7 +2373,7 @@ bool libretro::Core::environmentCallback(unsigned cmd, void* data)
     }
     else
     {
-      _logger->debug(TAG "Unimplemented env call: %s", name);
+      _logger->debug(TAG "Unimplemented env call: %s", "RETRO_ENVIRONMENT_GET_VFS_INTERFACE");
     }
 
     return false;

@@ -41,7 +41,7 @@ void getGameName(char name[], size_t len)
   name[len - 1] = '\0';
 }
 
-void pause()
+void pauseEmulation()
 {
   app.pauseGame(true);
 }
@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
 
   if (ok)
   {
-#if defined(MINGW) || defined(__MINGW32__) || defined(__MINGW64__)
+#if !defined(_MSC_VER)
     app.run();
 #else
     __try

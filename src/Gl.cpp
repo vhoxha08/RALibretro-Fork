@@ -1,4 +1,5 @@
 #include "Gl.h"
+#include "Platform.h"
 
 #include <SDL_video.h>
 #include <SDL_opengl_glext.h>

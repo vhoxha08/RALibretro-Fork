@@ -1368,6 +1368,8 @@ bool KeyBinds::deserializeBindings(const char* json)
   return (res == JSONSAX_OK);
 }
 
+#ifdef _WIN32
+
 // SDL defines a function to convert a virtual key to a SDL scancode, but it's not public.
 // * SDL_Scancode WindowsScanCodeToSDLScanCode(LPARAM lParam, WPARAM wParam);
 //
@@ -2031,3 +2033,20 @@ void KeyBinds::showHotKeyDialog(Input& input)
   if (db.show())
     _bindings = db.getBindings();
 }
+
+#else // !_WIN32
+
+// TODO: ImGui versions of the controller and hot key dialogs
+void KeyBinds::showControllerDialog(Input& input, int port)
+{
+  (void)input;
+  _logger->warn("[KEY] Controller %d settings dialog is not available yet", port + 1);
+}
+
+void KeyBinds::showHotKeyDialog(Input& input)
+{
+  (void)input;
+  _logger->warn("[KEY] Hot key settings dialog is not available yet");
+}
+
+#endif // _WIN32

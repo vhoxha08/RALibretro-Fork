@@ -20,6 +20,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include "Emulator.h"
 
 #include "Util.h"
+#include "Platform.h"
 
 #include "components/Config.h"
 #include "components/Logger.h"
@@ -98,7 +99,7 @@ const char* getEmulatorExtensions(const std::string& coreName, int system)
 bool loadCores(Config* config, Logger* logger)
 {
   std::string path = config->getRootFolder();
-  path += "Cores\\cores.json";
+  path += "Cores" PATH_SEPARATOR "cores.json";
 
   logger->debug(TAG "Identifying available cores");
 
@@ -140,7 +141,7 @@ bool loadCores(Config* config, Logger* logger)
         if (!ud->inCore)
         {
           std::string path = ud->config->getRootFolder();
-          path += "Cores\\" + ud->key + ".dll";
+          path += "Cores" PATH_SEPARATOR + ud->key + CORE_EXTENSION;
 
           s_coreInfos.emplace_back();
           ud->core = &s_coreInfos.back();
@@ -519,7 +520,7 @@ protected:
   void deleteCore(HWND hwnd, const std::string& coreName)
   {
     std::string path = config->getRootFolder();
-    path += "Cores\\" + coreName + ".dll";
+    path += "Cores" PATH_SEPARATOR + coreName + CORE_EXTENSION;
     util::deleteFile(path);
 
     for (auto& core : s_coreInfos)
@@ -537,13 +538,13 @@ protected:
 
   void updateCore(HWND hwnd, const std::string& coreName)
   {
-    std::string coreFile = coreName + ".dll";
+    std::string coreFile = coreName + CORE_EXTENSION;
     std::string path = config->getRootFolder();
-    path += "Cores\\" + coreFile;
+    path += "Cores" PATH_SEPARATOR + coreFile;
     std::string zipPath = path + ".zip";
 
     std::string url = BUILDBOT_URL;
-    url += coreName + ".dll.zip";
+    url += coreName + CORE_EXTENSION ".zip";
     if (!util::downloadFile(logger, url, zipPath))
     {
       MessageBox(hwnd, "Download failed.", "Error", MB_OK);
@@ -647,7 +648,7 @@ static const char* s_getCoreName(int index, void* udata)
 static void getCoreSystemTimes(Config* config, Logger* logger)
 {
   std::string path = config->getRootFolder();
-  path += "Cores\\index.txt";
+  path += "Cores" PATH_SEPARATOR "index.txt";
   const time_t now = time(NULL);
   const time_t lastCheck = util::fileTime(path);
   if (now - lastCheck > 60 * 60 * 24) // 24 hours
@@ -763,6 +764,16 @@ bool showCoresDialog(Config* config, Logger* logger, const std::string& loadedCo
   db.show();
 
   return db.modified;
+}
+
+#elif !defined(_CONSOLE)
+
+// TODO: ImGui version of the core manager
+bool showCoresDialog(Config* config, Logger* logger, const std::string& loadedCore, int selectedSystem)
+{
+  (void)config; (void)loadedCore; (void)selectedSystem;
+  logger->warn(TAG "Core manager dialog is not available yet");
+  return false;
 }
 
 #endif

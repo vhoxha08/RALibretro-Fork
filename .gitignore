@@ -15,3 +15,7 @@
 /src/RA_BuildVer.h
 
 .vscode
+
+# CMake build tree
+/build/
+/build-*/

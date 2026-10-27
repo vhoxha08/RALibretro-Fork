@@ -29,9 +29,13 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <memory.h>
 #include <string.h>
 
+#ifdef _WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winuser.h>
+#else
+#include "Platform.h"
+#endif
 
 #ifdef HAVE_CHD
 void rc_hash_init_chd_cdreader(); /* in HashCHD.cpp */
@@ -47,9 +51,12 @@ static rc_libretro_hash_set_t g_hashSet;
 
 static void rhash_display_error_message(const char* message)
 {
-#ifdef _WINDOWS
+#if defined(_WINDOWS)
   extern HWND g_mainWindow;
   MessageBoxA(g_mainWindow, (LPCSTR)message, "Unable to identify game", MB_OK);
+#elif !defined(_CONSOLE)
+  extern HWND g_mainWindow;
+  MessageBox(g_mainWindow, message, "Unable to identify game", MB_OK);
 #else
   fprintf(stderr, "Unable to identify game");
 #endif

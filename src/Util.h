@@ -31,6 +31,11 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
  #include <windows.h>
 #endif
 
+// HWND for the file dialogs in the macOS/Linux GUI build (RAHasher is a console tool)
+#if !defined(_WINDOWS) && !defined(_CONSOLE)
+ #include "Platform.h"
+#endif
+
 // _WIN32 says we're building _on_ Windows
 #ifdef _WIN32
  #define strcasecmp _stricmp
@@ -74,11 +79,12 @@ namespace util
   std::string directory(const std::string& path);
   bool getFiles(const std::string& path, const std::string& extension, std::vector<std::string>& matches);
 
-#ifdef _WINDOWS
+#if defined(_WINDOWS) || !defined(_CONSOLE)
   void        ensureDirectoryExists(const std::string& path);
 #endif
 
-#ifdef _WINDOWS
+#if defined(_WINDOWS) || !defined(_CONSOLE)
+  // extensionsFilter uses the Win32 format: pairs of "Description\0*.ext1;*.ext2\0", ending with "\0\0"
   std::string openFileDialog(HWND hWnd, const std::string& extensionsFilter, const std::string& initialDirectory);
   std::string saveFileDialog(HWND hWnd, const std::string& extensionsFilter, const char* defaultExtension, const std::string& initialDirectory);
 #endif

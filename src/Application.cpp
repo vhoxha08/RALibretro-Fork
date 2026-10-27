@@ -44,11 +44,14 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <math.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winuser.h>
 #include <commdlg.h>
 #include <shlobj.h>
+#endif
+#include "Platform.h"
 
 #define TAG "[APP] "
 
@@ -167,12 +170,14 @@ bool Application::init(const char* title, int width, int height)
     int window_x = SDL_WINDOWPOS_CENTERED, window_y = SDL_WINDOWPOS_CENTERED;
 
     loadConfiguration(&window_x, &window_y, &width, &height);
+#ifdef _WIN32
     if (window_y != SDL_WINDOWPOS_CENTERED)
     {
       // captured window position includes menu bar, which won't exist at initial positioning
       // adjust for it.
       window_y -= GetSystemMetrics(SM_CYMENU);
     }
+#endif
 
     // Setup window
     if (SDL_GL_LoadLibrary(NULL) != 0)
@@ -199,6 +204,7 @@ bool Application::init(const char* title, int width, int height)
   }
   else
   {
+#ifdef _WIN32
     SDL_SysWMinfo wminfo;
     SDL_VERSION(&wminfo.version);
 
@@ -211,6 +217,9 @@ bool Application::init(const char* title, int width, int height)
     g_mainWindow = wminfo.info.win.window;
     _menu = LoadMenu(NULL, "MAIN");
     SetMenu(g_mainWindow, _menu);
+#else
+    g_mainWindow = _window;
+#endif
 
     SDL_SetWindowSize(_window, width, height);
 
@@ -301,8 +310,10 @@ bool Application::init(const char* title, int width, int height)
   inited = kVideoInited;
 
   {
+#ifdef _WIN32
     _cdRomMenu = GetSubMenu(GetSubMenu(_menu, 0), CDROM_MENU_INDEX);
     assert(GetMenuItemID(_cdRomMenu, 0) == IDM_CD_OPEN_TRAY);
+#endif
 
     if (!loadCores(&_config, &_logger))
     {
@@ -321,7 +332,9 @@ bool Application::init(const char* title, int width, int height)
     goto error;
   }
 
+#ifdef _WIN32
   SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
+#endif
 
   _coreName.clear();
   _gameData = NULL;
@@ -407,9 +420,11 @@ void Application::processEvents()
         handle(&event.button);
         break;
 
+#ifdef _WIN32
       case SDL_SYSWMEVENT:
         handle(&event.syswm);
         break;
+#endif
 
       case SDL_KEYUP:
       case SDL_KEYDOWN:
@@ -743,9 +758,9 @@ bool Application::loadCore(const std::string& coreName)
   }
 
   std::string path = _config.getRootFolder();
-  path += "Cores\\";
+  path += "Cores" PATH_SEPARATOR;
   path += coreName;
-  path += ".dll";
+  path += CORE_EXTENSION;
 
   // open the core and fetch all the hooks
   if (!_core.loadCore(path.c_str()))
@@ -853,11 +868,6 @@ bool Application::loadCore(const std::string& coreName)
   }
   RA_SetUserAgentDetail(coreDetail.c_str());
 
-  MENUITEMINFO info;
-  memset(&info, 0, sizeof(info));
-  info.cbSize = sizeof(info);
-  info.fMask = MIIM_TYPE | MIIM_DATA;
-
   switch (_system)
   {
   case RC_CONSOLE_AMIGA:
@@ -876,26 +886,30 @@ bool Application::loadCore(const std::string& coreName)
   case RC_CONSOLE_SHARPX1:
   case RC_CONSOLE_VIC20:
   case RC_CONSOLE_ZX_SPECTRUM:
-    info.dwTypeData = (LPSTR)"Insert Disk";
-    SetMenuItemInfo(_menu, IDM_CD_OPEN_TRAY, false, &info);
-    info.dwTypeData = (LPSTR)"Floppy Drive";
-    SetMenuItemInfo(GetSubMenu(_menu, 0), CDROM_MENU_INDEX, true, &info);
     _isDriveFloppy = true;
     break;
 
   default:
-    info.dwTypeData = (LPSTR)"Close Tray";
-    SetMenuItemInfo(_menu, IDM_CD_OPEN_TRAY, false, &info);
-    info.dwTypeData = (LPSTR)"CD-ROM";
-    SetMenuItemInfo(GetSubMenu(_menu, 0), CDROM_MENU_INDEX, true, &info);
     _isDriveFloppy = false;
     break;
   }
+
+#ifdef _WIN32
+  MENUITEMINFO info;
+  memset(&info, 0, sizeof(info));
+  info.cbSize = sizeof(info);
+  info.fMask = MIIM_TYPE | MIIM_DATA;
+
+  info.dwTypeData = (LPSTR)(_isDriveFloppy ? "Insert Disk" : "Close Tray");
+  SetMenuItemInfo(_menu, IDM_CD_OPEN_TRAY, false, &info);
+  info.dwTypeData = (LPSTR)(_isDriveFloppy ? "Floppy Drive" : "CD-ROM");
+  SetMenuItemInfo(GetSubMenu(_menu, 0), CDROM_MENU_INDEX, true, &info);
   EnableMenuItem(_cdRomMenu, IDM_CD_OPEN_TRAY, MF_DISABLED);
 
   size_t menuItemCount = GetMenuItemCount(_cdRomMenu);
   while (menuItemCount > 1)
     DeleteMenu(_cdRomMenu, --menuItemCount, MF_BYPOSITION);
+#endif
 
   return true;
 }
@@ -905,7 +919,7 @@ bool Application::validateHardcoreEnablement()
   if (_config.validateSettingsForHardcore(_core.getSystemInfo()->library_name, _system, false))
     return true;
 
-#if defined(MINGW) || defined(__MINGW32__) || defined(__MINGW64__)
+#if !defined(_MSC_VER)
   RA_DisableHardcore();
 #else
   __try
@@ -1616,14 +1630,20 @@ void Application::loadGame()
 
 void Application::enableItems(const UINT* items, size_t count, UINT enable)
 {
+#ifdef _WIN32
   for (size_t i = 0; i < count; i++, items++)
   {
     EnableMenuItem(_menu, *items, enable);
   }
+#else
+  // the ImGui menu derives enabled items from the application state
+  (void)items; (void)count; (void)enable;
+#endif
 }
 
 void Application::enableSlots()
 {
+#ifdef _WIN32
   UINT enabled = hardcore() ? MF_DISABLED : MF_ENABLED;
   
   for (unsigned ndx = 1; ndx <= 10; ndx++)
@@ -1637,10 +1657,12 @@ void Application::enableSlots()
       EnableMenuItem(_menu, IDM_LOAD_STATE_1 + ndx - 1, MF_DISABLED);
     }
   }
+#endif
 }
 
 void Application::enableRecent()
 {
+#ifdef _WIN32
   size_t i = 0;
 
   for (; i < _recentList.size(); i++)
@@ -1687,6 +1709,7 @@ void Application::enableRecent()
     info.dwTypeData = (char*)"Empty";
     SetMenuItemInfo(_menu, id, false, &info);
   }
+#endif
 }
 
 void Application::toggleTray()
@@ -1747,6 +1770,7 @@ void Application::readyDisc(unsigned newDiscIndex)
 
 void Application::updateDiscMenu(bool updateLabels)
 {
+#ifdef _WIN32
   size_t i = 0;
   size_t coreDiscCount = _core.getNumDiscs();
 
@@ -1808,6 +1832,9 @@ void Application::updateDiscMenu(bool updateLabels)
 
     EnableMenuItem(_menu, IDM_CD_OPEN_TRAY, MF_ENABLED);
   }
+#else
+  (void)updateLabels;
+#endif
 }
 
 std::string Application::getDiscLabel(unsigned index) const
@@ -1852,7 +1879,7 @@ std::string Application::getConfigPath()
 std::string Application::getCoreConfigPath(const std::string& coreName)
 {
   std::string path = _config.getRootFolder();
-  path += "Cores\\";
+  path += "Cores" PATH_SEPARATOR;
   path += coreName;
   path += ".json";
   return path;
@@ -2014,6 +2041,7 @@ void Application::aboutDialog()
   ::aboutDialog(_logger.contents().c_str());
 }
 
+#ifdef _WIN32
 static void buildSystemMenu(HMENU parentMenu, int system, std::string systemName)
 {
   std::set<std::string> systemCores;
@@ -2032,9 +2060,11 @@ static void buildSystemMenu(HMENU parentMenu, int system, std::string systemName
 
   AppendMenu(parentMenu, MF_POPUP | MF_STRING, (UINT_PTR)systemMenu, systemName.c_str());
 }
+#endif
 
 void Application::buildSystemsMenu()
 {
+#ifdef _WIN32
   std::set<int> availableSystems;
   getAvailableSystems(availableSystems);
   if (availableSystems.empty())
@@ -2093,6 +2123,7 @@ void Application::buildSystemsMenu()
     for (const auto& pair : systemMap)
       buildSystemMenu(systemsMenu, pair.second, pair.first);
   }
+#endif
 }
 
 void Application::loadConfiguration(int* window_x, int* window_y, int* window_width, int* window_height)
@@ -2336,7 +2367,9 @@ void Application::toggleFullscreen()
   Uint32 fullscreen = SDL_GetWindowFlags(_window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
   if (fullscreen)
   {
+#ifdef _WIN32
     SetMenu(g_mainWindow, _menu);
+#endif
     SDL_ShowCursor(SDL_ENABLE);
   }
 
@@ -2344,17 +2377,24 @@ void Application::toggleFullscreen()
 
   if (!fullscreen)
   {
+#ifdef _WIN32
     SetMenu(g_mainWindow, NULL);
+#endif
     SDL_ShowCursor(SDL_DISABLE);
   }
 }
 
+#ifdef _WIN32
 void Application::handle(const SDL_SysWMEvent* syswm)
 {
   if (syswm->msg->msg.win.msg == WM_COMMAND)
-  {
-    WORD cmd = LOWORD(syswm->msg->msg.win.wParam);
+    handleCommand(LOWORD(syswm->msg->msg.win.wParam));
+}
+#endif
 
+void Application::handleCommand(unsigned cmd)
+{
+  {
     switch (cmd)
     {
     case IDM_LOAD_GAME:
@@ -2520,9 +2560,9 @@ void Application::handle(const SDL_SysWMEvent* syswm)
         if (coreName != _coreName) // cannot update active core, so don't check if it's outdated
         {
           std::string path = _config.getRootFolder();
-          path += "Cores\\";
+          path += "Cores" PATH_SEPARATOR;
           path += coreName;
-          path += ".dll";
+          path += CORE_EXTENSION;
 
           const time_t coreUpdated = util::fileTime(path);
           const time_t coreAge = time(NULL) - coreUpdated;
@@ -2766,12 +2806,16 @@ void Application::updateMouseCapture()
 void Application::toggleFastForwarding(unsigned extra)
 {
   // get the current fast forward selection
+#ifdef _WIN32
   MENUITEMINFO info;
   memset(&info, 0, sizeof(info));
   info.cbSize = sizeof(info);
   info.fMask = MIIM_STATE;
   GetMenuItemInfo(_menu, IDM_TURBO_GAME, false, &info);
   const bool checked = (info.fState == MFS_CHECKED);
+#else
+  const bool checked = _fastForwardChecked;
+#endif
 
   switch (extra)
   {
@@ -2785,8 +2829,12 @@ void Application::toggleFastForwarding(unsigned extra)
 
     case 2: // FF toggle pressed - switch to opposite of selection (and change selection)
       _config.setFastForwarding(!checked);
+#ifdef _WIN32
       info.fState = checked ? MFS_UNCHECKED : MFS_CHECKED;
       SetMenuItemInfo(_menu, IDM_TURBO_GAME, false, &info);
+#else
+      _fastForwardChecked = !checked;
+#endif
       break;
   }
 
@@ -2830,12 +2878,14 @@ void Application::setBackgroundInput(bool enabled)
 {
   SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, enabled ? "1" : "0");
 
+#ifdef _WIN32
   MENUITEMINFO info;
   memset(&info, 0, sizeof(info));
   info.cbSize = sizeof(info);
   info.fMask = MIIM_STATE;
   info.fState = enabled ? MFS_CHECKED : MFS_UNCHECKED;
   SetMenuItemInfo(_menu, IDM_INPUT_BACKGROUND_INPUT, false, &info);
+#endif
 }
 
 bool Application::handleArgs(int argc, char* argv[])

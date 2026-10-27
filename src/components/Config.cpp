@@ -26,16 +26,23 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <rcheevos/src/libretro/rc_libretro.h>
 #include <rcheevos/include/rc_consoles.h>
 
+#include "Platform.h"
+
 #ifdef _WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#endif
 
 extern HWND g_mainWindow;
-#endif
 
 #include <string.h>
 #include <sys/stat.h>
 #include <unordered_map>
+
+#ifndef _WIN32
+#include <SDL.h>
+#include <unistd.h>
+#endif
 
 #define TAG "[CFG] "
 
@@ -50,16 +57,36 @@ void Config::initRootFolder()
   len = GetFullPathNameW(path, MAX_PATH, fullpath, NULL);
 
   _rootFolder = util::ucharToUtf8(fullpath);
+#else
+  // Like the Windows build, run "portable" from the executable's folder if Cores are installed next to it.
+  // Otherwise use the per-user data folder (~/Library/Application Support/RALibretro, ~/.local/share/RALibretro).
+  if (char* basePath = SDL_GetBasePath())
+  {
+    _rootFolder = basePath;
+    SDL_free(basePath);
+  }
+
+  if (_rootFolder.empty() || !util::exists(_rootFolder + "Cores"))
+  {
+    if (char* prefPath = SDL_GetPrefPath(nullptr, "RALibretro"))
+    {
+      _rootFolder = prefPath;
+      SDL_free(prefPath);
+    }
+  }
+
+  // the code below strips the file name from the executable path; these are already directories
+  _rootFolder += "RALibretro";
 #endif
 
-  size_t index = _rootFolder.find_last_of('\\');
+  size_t index = _rootFolder.find_last_of(PATH_SEPARATOR_CHAR);
   if (index != std::string::npos)
   {
     _rootFolder.resize(index + 1);
   }
   else
   {
-    _rootFolder = ".\\";
+    _rootFolder = "." PATH_SEPARATOR;
   }
 }
 
@@ -67,13 +94,15 @@ bool Config::init(libretro::LoggerComponent* logger)
 {
   _logger = logger;
 
-  _assetsFolder = _rootFolder + "Assets\\";
-  _saveFolder = _rootFolder + "Saves\\";
-  _systemFolder = _rootFolder + "System\\";
-  _screenshotsFolder = _rootFolder + "Screenshots\\";
+  _assetsFolder = _rootFolder + "Assets" PATH_SEPARATOR;
+  _saveFolder = _rootFolder + "Saves" PATH_SEPARATOR;
+  _systemFolder = _rootFolder + "System" PATH_SEPARATOR;
+  _screenshotsFolder = _rootFolder + "Screenshots" PATH_SEPARATOR;
 
 #ifdef WIN32
  #define mkdir(path) CreateDirectory(path, NULL)
+#else
+ #define mkdir(path) ::mkdir(path, 0755)
 #endif
 
   mkdir(_assetsFolder.c_str());
@@ -88,7 +117,12 @@ bool Config::init(libretro::LoggerComponent* logger)
   _logger->info(TAG "Screenshots folder: %s", _screenshotsFolder.c_str());
 
   // TODO This should be done in main.cpp as soon as possible
+#ifdef _WIN32
   SetCurrentDirectory(_rootFolder.c_str());
+#else
+  if (chdir(_rootFolder.c_str()) != 0)
+    _logger->warn(TAG "Could not change to the root folder");
+#endif
 
   // these settings are global and should not be modified by reset()
   _audioWhileFastForwarding = true;
@@ -1025,6 +1059,20 @@ void Config::showEmulatorSettingsDialog()
     _gameFocusCaptureMouse = gameFocusCaptureMouse;
   }
 }
+#elif !defined(_CONSOLE)
+
+// TODO: ImGui versions of the core and emulator settings dialogs
+void Config::showDialog(const std::string& coreName, Input& input, int system_id)
+{
+  (void)input; (void)system_id;
+  _logger->warn(TAG "Core settings dialog for %s is not available yet", coreName.c_str());
+}
+
+void Config::showEmulatorSettingsDialog()
+{
+  _logger->warn(TAG "Emulator settings dialog is not available yet");
+}
+
 #endif
 
 const char* Config::s_getOption(int index, void* udata)

@@ -19,7 +19,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
-#ifndef _WINDOWS
+#if !defined(_WINDOWS) && defined(_CONSOLE)
 // prevent interface from attempting to define DLL functions that require Windows APIs
 #define RA_EXPORTS 
 

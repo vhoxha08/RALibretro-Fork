@@ -31,11 +31,17 @@ along with RALibRetro.  If not, see <http://www.gnu.org/licenses/>.
 #include <rcheevos/include/rc_consoles.h>
 #include <miniz.h>
 
+#ifdef _WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winuser.h>
 #include <commdlg.h>
 #include <shlobj.h>
+#else
+#include "Platform.h"
+#endif
+
+#include "components/Dialog.h"
 
 #include <assert.h>
 #include <time.h>
@@ -82,24 +88,24 @@ std::string States::buildPath(Path path) const
   std::string savePath = _config->getRootFolder();
 
   if (path & Path::State)
-    savePath += "States\\";
+    savePath += "States" PATH_SEPARATOR;
   else
-    savePath += "Saves\\";
+    savePath += "Saves" PATH_SEPARATOR;
 
   if ((path & Path::System) && _system)
   {
     savePath += util::sanitizeFileName(rc_console_name(_system));
-    savePath += '\\';
+    savePath += PATH_SEPARATOR_CHAR;
   }
 
   if ((path & Path::Core) && _core->getSystemInfo()->library_name)
   {
     savePath += util::sanitizeFileName(_core->getSystemInfo()->library_name);
-    savePath += '\\';
+    savePath += PATH_SEPARATOR_CHAR;
   }
 
   if ((path & Path::Game) && !_gameFileName.empty())
-    savePath += util::fileName(_gameFileName) + "\\";
+    savePath += util::fileName(_gameFileName) + PATH_SEPARATOR;
 
   return savePath;
 }
