@@ -836,6 +836,111 @@ INT_PTR Config::ConfigDialog::dialogProc(HWND hwnd, UINT msg, WPARAM wparam, LPA
   return Dialog::dialogProc(hwnd, msg, wparam, lparam);
 }
 
+#elif !defined(_CONSOLE)
+
+void Config::ConfigDialog::updateVariables()
+{
+  int id = 0;
+  for (size_t i = 0; i < variables.size(); ++i)
+  {
+    auto& var = variables[i];
+    if (var->_category != category)
+      continue;
+
+    if (ControlData* label = findControl(50000 + id))
+    {
+      label->_caption = var->_name;
+      label->_visible = true;
+    }
+
+    if (ControlData* comboBox = findControl(51000 + id))
+    {
+      comboBox->_options = var->_options;
+      comboBox->_selectedValue = selections[i];
+      comboBox->_visible = true;
+    }
+
+    ++id;
+  }
+
+  for (; id < maxCount; ++id)
+  {
+    if (ControlData* label = findControl(50000 + id))
+      label->_visible = false;
+    if (ControlData* comboBox = findControl(51000 + id))
+      comboBox->_visible = false;
+  }
+}
+
+void Config::ConfigDialog::storeSelections()
+{
+  int id = 0;
+  for (size_t i = 0; i < variables.size(); ++i)
+  {
+    auto& var = variables[i];
+    if (var->_category != category)
+      continue;
+
+    if (const ControlData* comboBox = findControl(51000 + id))
+    {
+      if (comboBox->_selectedValue != selections[i])
+      {
+        selections[i] = comboBox->_selectedValue;
+        updated = true;
+      }
+    }
+
+    ++id;
+  }
+}
+
+void Config::ConfigDialog::retrieveData()
+{
+  storeSelections();
+  _updated = updated;
+}
+
+void Config::ConfigDialog::initControls()
+{
+  // the comboboxes are filled here; Dialog::initControls would ask s_getOption for their options
+  if (owner->_categories.size() > 0)
+  {
+    if (ControlData* comboBox = findControl(49999))
+    {
+      comboBox->_options.clear();
+      comboBox->_options.emplace_back("General");
+      for (const auto& category : owner->_categories)
+        comboBox->_options.push_back(category._name);
+
+      comboBox->_selectedValue = 0;
+    }
+  }
+
+  updateVariables();
+}
+
+void Config::ConfigDialog::onSelectionChanged(DWORD id)
+{
+  if (id != 49999)
+    return;
+
+  const ControlData* comboBox = findControl(49999);
+  const int selection = comboBox ? comboBox->_selectedValue : 0;
+
+  storeSelections();
+
+  if (selection == 0)
+    category = nullptr;
+  else
+    category = &owner->_categories[selection - 1];
+
+  updateVariables();
+}
+
+#endif
+
+#if defined(_WINDOWS) || !defined(_CONSOLE)
+
 void Config::showDialog(const std::string& coreName, Input& input, int system_id)
 {
   const WORD HEADER_WIDTH = 90;
@@ -1059,20 +1164,6 @@ void Config::showEmulatorSettingsDialog()
     _gameFocusCaptureMouse = gameFocusCaptureMouse;
   }
 }
-#elif !defined(_CONSOLE)
-
-// TODO: ImGui versions of the core and emulator settings dialogs
-void Config::showDialog(const std::string& coreName, Input& input, int system_id)
-{
-  (void)input; (void)system_id;
-  _logger->warn(TAG "Core settings dialog for %s is not available yet", coreName.c_str());
-}
-
-void Config::showEmulatorSettingsDialog()
-{
-  _logger->warn(TAG "Emulator settings dialog is not available yet");
-}
-
 #endif
 
 const char* Config::s_getOption(int index, void* udata)

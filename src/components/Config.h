@@ -21,6 +21,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #if defined(_WINDOWS) || !defined(_CONSOLE)
  #include "components/Input.h"
+ #include "components/Dialog.h"
 #endif
 
 #include "libretro/Components.h"
@@ -135,6 +136,27 @@ protected:
     void retrieveData(HWND hwnd) override;
 
     HWND hwnd;
+  };
+#elif !defined(_CONSOLE)
+  class ConfigDialog : public Dialog
+  {
+  public:
+    std::vector<Variable*> variables;
+    std::vector<int> selections;
+    std::vector<std::string> categoryNames;
+    Config* owner;
+    int maxCount;
+    Category* category;
+    bool updated;
+
+    void updateVariables();
+
+  protected:
+    void initControls() override;
+    void retrieveData() override;
+    void onSelectionChanged(DWORD id) override;
+
+    void storeSelections();
   };
 #endif
 

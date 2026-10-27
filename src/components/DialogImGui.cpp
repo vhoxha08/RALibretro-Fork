@@ -41,10 +41,13 @@ void Dialog::init(const char* title)
 
 static void grow(WORD& width, WORD& height, WORD x, WORD y, WORD w, WORD h)
 {
-  if (x + w > width)
-    width = x + w;
-  if (y + h > height)
-    height = y + h;
+  // coordinates are signed (controls may be nudged above the first row)
+  const int right = (int16_t)x + (int16_t)w;
+  const int bottom = (int16_t)y + (int16_t)h;
+  if (right > (int16_t)width)
+    width = (WORD)right;
+  if (bottom > (int16_t)height)
+    height = (WORD)bottom;
 }
 
 void Dialog::addCheckbox(const char* caption, DWORD id, WORD x, WORD y, WORD w, WORD h, bool* checked)
@@ -156,6 +159,9 @@ void Dialog::initControls()
 
       case kCombobox:
         cd._options.clear();
+        if (cd._getOption == nullptr)
+          break;
+
         for (int index = 0;; index++)
         {
           const char* option = cd._getOption(index, cd._udata);
@@ -164,7 +170,7 @@ void Dialog::initControls()
 
           cd._options.emplace_back(option);
         }
-        cd._selectedValue = *cd._selected;
+        cd._selectedValue = cd._selected ? *cd._selected : 0;
         break;
 
       case kEditbox:
@@ -189,6 +195,8 @@ void Dialog::retrieveData()
         break;
 
       case kCombobox:
+        if (cd._selected == nullptr)
+          break;
         _updated = _updated || cd._selectedValue != *cd._selected;
         *cd._selected = cd._selectedValue;
         break;
@@ -209,8 +217,10 @@ void Dialog::retrieveData()
 
 // Dialog layouts are in Win32 dialog units: 1/4 of the average character width horizontally and 1/8 of the
 // font height vertically.
-static float unitsToPixelsX(WORD units) { return units * ImGui::GetFontSize() * 0.5f / 4.0f * 1.15f; }
-static float unitsToPixelsY(WORD units) { return units * ImGui::GetFontSize() / 8.0f * 1.15f; }
+// ImGui's default font is monospaced and wider than the proportional Windows dialog font, so text gets
+// some extra room. Coordinates are signed, like in a Win32 dialog template.
+static float unitsToPixelsX(WORD units) { return (int16_t)units * ImGui::CalcTextSize("M").x * 0.35f; }
+static float unitsToPixelsY(WORD units) { return (int16_t)units * ImGui::GetFontSize() / 8.0f * 1.15f; }
 
 void Dialog::render()
 {
@@ -222,9 +232,13 @@ void Dialog::render()
   const bool enterPressed = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
   const bool escapePressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
   DWORD clicked = 0;
+  DWORD changed = 0;
 
   for (auto& cd : _controlData)
   {
+    if (!cd._visible)
+      continue;
+
     const ImVec2 pos(origin.x + unitsToPixelsX(cd._x), origin.y + unitsToPixelsY(cd._y));
     const float w = unitsToPixelsX(cd._w);
     const float h = unitsToPixelsY(cd._type == kEditbox && cd._lines > 1 ? cd._h * cd._lines : cd._h);
@@ -234,9 +248,18 @@ void Dialog::render()
     switch (cd._type)
     {
       case kLabel:
-        ImGui::PushTextWrapPos(pos.x + w);
-        ImGui::TextUnformatted(cd._caption.c_str());
-        ImGui::PopTextWrapPos();
+        // only wrap labels that were laid out for several lines; the wider font would otherwise wrap
+        // single-line labels that just fit on Windows
+        if (h >= ImGui::GetTextLineHeightWithSpacing() * 1.5f)
+        {
+          ImGui::PushTextWrapPos(pos.x + w);
+          ImGui::TextUnformatted(cd._caption.c_str());
+          ImGui::PopTextWrapPos();
+        }
+        else
+        {
+          ImGui::TextUnformatted(cd._caption.c_str());
+        }
         break;
 
       case kCheckbox:
@@ -253,8 +276,11 @@ void Dialog::render()
           for (int i = 0; i < (int)cd._options.size(); ++i)
           {
             const bool selected = (i == cd._selectedValue);
-            if (ImGui::Selectable(cd._options[i].c_str(), selected))
+            if (ImGui::Selectable(cd._options[i].c_str(), selected) && !selected)
+            {
               cd._selectedValue = i;
+              changed = cd._id;
+            }
             if (selected)
               ImGui::SetItemDefaultFocus();
           }
@@ -307,6 +333,9 @@ void Dialog::render()
       clicked = IDCANCEL;
     }
   }
+
+  if (changed != 0)
+    onSelectionChanged(changed);
 
   if (clicked == IDOK)
   {

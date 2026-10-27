@@ -67,6 +67,7 @@ protected:
     std::string _caption;
     WORD _x, _y, _w, _h;
     bool _isDefault = false;
+    bool _visible = true;
 
     bool* _checked = nullptr;
     GetOption _getOption = nullptr;
@@ -95,6 +96,8 @@ protected:
   virtual void retrieveData();
   // called for buttons other than OK/Cancel; return true if handled
   virtual bool onButton(DWORD id) { (void)id; return false; }
+  // called when the user picks a different item in a combobox
+  virtual void onSelectionChanged(DWORD id) { (void)id; }
   // called for each SDL event while the dialog is open; return true to consume it
   virtual bool onEvent(const union SDL_Event& event) { (void)event; return false; }
   // called once per frame while the dialog is open
