@@ -48,4 +48,10 @@ void RA_SetTextureHandlers(uintptr_t (*createFromFile)(const char* utf8Path, int
                            uintptr_t (*createFromPixels)(const uint32_t* argb, int width, int height),
                            void (*destroy)(uintptr_t texture));
 
+// The platform's file dialog. mode: 1 = open, 2 = save, 3 = select folder. filters is a list of "Description\tspec\n"
+// entries (spec = "ext1,ext2"). Writes the chosen UTF-8 path to result and returns non-zero, or 0 if canceled.
+void RA_SetFileDialogHandler(int (*showFileDialog)(int mode, const char* title, const char* filters,
+                                                   const char* defaultPath, const char* defaultName,
+                                                   char* result, int resultSize));
+
 #endif

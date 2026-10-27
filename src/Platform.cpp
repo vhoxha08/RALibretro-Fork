@@ -26,7 +26,11 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "stb_image.h"
 
+#include <nfd.h>
+
 #include <cstring>
+#include <string>
+#include <vector>
 
 int MessageBox(HWND hWnd, const char* text, const char* caption, unsigned int type)
 {
@@ -189,11 +193,70 @@ static void destroyTexture(uintptr_t texture)
   glDeleteTextures(1, &name);
 }
 
+static int showFileDialog(int mode, const char*, const char* filters, const char* defaultPath,
+                          const char* defaultName, char* result, int resultSize)
+{
+  // "Description\tspec\n" entries
+  std::vector<std::string> names, specs;
+  for (const char* line = filters; line && *line;)
+  {
+    const char* tab = strchr(line, '\t');
+    const char* end = strchr(line, '\n');
+    if (!end)
+      end = line + strlen(line);
+    if (tab && tab < end)
+    {
+      names.emplace_back(line, tab);
+      specs.emplace_back(tab + 1, end);
+    }
+    line = *end ? end + 1 : end;
+  }
+
+  std::vector<nfdu8filteritem_t> items;
+  for (size_t i = 0; i < names.size(); ++i)
+    items.push_back({names[i].c_str(), specs[i].c_str()});
+
+  if (NFD_Init() != NFD_OKAY)
+    return 0;
+
+  const char* path = (defaultPath && *defaultPath) ? defaultPath : nullptr;
+  nfdu8char_t* outPath = nullptr;
+  nfdresult_t status = NFD_CANCEL;
+  switch (mode)
+  {
+    case 1:
+      status = NFD_OpenDialogU8(&outPath, items.data(), (nfdfiltersize_t)items.size(), path);
+      break;
+    case 2:
+      status = NFD_SaveDialogU8(&outPath, items.data(), (nfdfiltersize_t)items.size(), path,
+                                (defaultName && *defaultName) ? defaultName : nullptr);
+      break;
+    case 3:
+      status = NFD_PickFolderU8(&outPath, path);
+      break;
+  }
+
+  int ok = 0;
+  if (status == NFD_OKAY && outPath)
+  {
+    if (strlen(outPath) < (size_t)resultSize)
+    {
+      strcpy(result, outPath);
+      ok = 1;
+    }
+    NFD_FreePathU8(outPath);
+  }
+
+  NFD_Quit();
+  return ok;
+}
+
 void installHostServices()
 {
   RA_SetClipboardHandlers(setClipboardText, getClipboardText);
   RA_SetAudioHandlers(playSound, nullptr);
   RA_SetTextureHandlers(createTextureFromFile, createTextureFromPixels, destroyTexture);
+  RA_SetFileDialogHandler(showFileDialog);
 }
 
 void shutdownHostServices()

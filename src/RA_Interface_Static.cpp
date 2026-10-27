@@ -153,3 +153,8 @@ void RA_SetTextureHandlers(uintptr_t (*createFromFile)(const char*, int*, int*),
 {
     _RA_SetTextureHandlers(createFromFile, createFromPixels, destroy);
 }
+
+void RA_SetFileDialogHandler(int (*showFileDialog)(int, const char*, const char*, const char*, const char*, char*, int))
+{
+    _RA_SetFileDialogHandler(showFileDialog);
+}
