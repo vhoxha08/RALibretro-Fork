@@ -75,6 +75,11 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
    return localtime_r(time, result) ? 0 : errno;
  }
 
+ inline int gmtime_s(struct tm* result, const time_t* time)
+ {
+   return gmtime_r(time, result) ? 0 : errno;
+ }
+
  #include <limits.h>
  #include <stdio.h>
  #include <strings.h>

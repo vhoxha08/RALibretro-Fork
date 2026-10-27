@@ -25,7 +25,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include "components/Config.h"
 #include "components/Logger.h"
 
-#ifdef _WINDOWS
+#if defined(_WINDOWS) || !defined(_CONSOLE)
 #include "components/Dialog.h"
 #include <RAInterface/RA_Consoles.h>
 #endif
@@ -37,7 +37,19 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #define TAG "[EMU] "
 
-#if defined(_M_X64) || defined(__amd64__)
+#if !defined(_WINDOWS) && !defined(_CONSOLE)
+extern HWND g_mainWindow;
+#endif
+
+#if defined(__APPLE__) && defined(__aarch64__)
+static const char* BUILDBOT_URL = "https://buildbot.libretro.com/nightly/apple/osx/arm64/latest/";
+#elif defined(__APPLE__)
+static const char* BUILDBOT_URL = "https://buildbot.libretro.com/nightly/apple/osx/x86_64/latest/";
+#elif defined(__linux__) && defined(__aarch64__)
+static const char* BUILDBOT_URL = "https://buildbot.libretro.com/nightly/linux/armv8/latest/";
+#elif defined(__linux__)
+static const char* BUILDBOT_URL = "https://buildbot.libretro.com/nightly/linux/x86_64/latest/";
+#elif defined(_M_X64) || defined(__amd64__)
 static const char* BUILDBOT_URL = "https://buildbot.libretro.com/nightly/windows/x86_64/latest/";
 #else
 static const char* BUILDBOT_URL = "https://buildbot.libretro.com/nightly/windows/x86/latest/";
@@ -170,7 +182,10 @@ bool loadCores(Config* config, Logger* logger)
           else if (ud->key == "platforms")
           {
             std::string value = std::string(str, num);
-#if defined(_M_X64) || defined(__amd64__)
+#if !defined(_WIN32)
+            // the platform list only names Windows builds ("win32", "win64") or "none"
+            if (true)
+#elif defined(_M_X64) || defined(__amd64__)
             if (value.find("win64") == std::string::npos)
 #else
             if (value.find("win32") == std::string::npos)
@@ -397,7 +412,7 @@ const char* getSystemManufacturer(int system)
   }
 }
 
-#ifdef _WINDOWS
+#if defined(_WINDOWS) || !defined(_CONSOLE)
 
 class CoreDialog : public Dialog
 {
@@ -412,10 +427,21 @@ public:
 
 protected:
 
+#ifdef _WIN32
+  int getSystemSelection(HWND hwnd) { return SendMessage(GetDlgItem(hwnd, 50000), CB_GETCURSEL, 0, 0); }
+  void showItem(HWND hwnd, int id, bool show) { ShowWindow(GetDlgItem(hwnd, id), show ? SW_SHOW : SW_HIDE); }
+  void setItemText(HWND hwnd, int id, const char* text) { SetWindowText(GetDlgItem(hwnd, id), text); }
+  void enableItem(HWND hwnd, int id, bool enable) { EnableWindow(GetDlgItem(hwnd, id), enable ? TRUE : FALSE); }
+#else
+  int getSystemSelection(HWND) { const ControlData* cd = findControl(50000); return cd ? cd->_selectedValue : -1; }
+  void showItem(HWND, int id, bool show) { if (ControlData* cd = findControl(id)) cd->_visible = show; }
+  void setItemText(HWND, int id, const char* text) { setControlText(id, text); }
+  void enableItem(HWND, int id, bool enable) { if (ControlData* cd = findControl(id)) cd->_enabled = enable; }
+#endif
+
   void updateCores(HWND hwnd)
   {
-    const HWND hComboBox = GetDlgItem(hwnd, 50000);
-    const int selectedIndex = SendMessage(hComboBox, CB_GETCURSEL, 0, 0);
+    const int selectedIndex = getSystemSelection(hwnd);
     if (selectedIndex < 0)
       return;
 
@@ -435,29 +461,29 @@ protected:
     size_t index = 0;
     for (const auto& pair : systemCores)
     {
-      HWND hCoreName = GetDlgItem(hwnd, 51000 + index);
-      HWND hLocalTime = GetDlgItem(hwnd, 51100 + index);
-      HWND hServerTime = GetDlgItem(hwnd, 51200 + index);
-      HWND hUpdate = GetDlgItem(hwnd, 51300 + index);
-      HWND hDelete = GetDlgItem(hwnd, 51400 + index);
+      const int hCoreName = 51000 + index;
+      const int hLocalTime = 51100 + index;
+      const int hServerTime = 51200 + index;
+      const int hUpdate = 51300 + index;
+      const int hDelete = 51400 + index;
 
-      ShowWindow(hCoreName, SW_SHOW);
-      ShowWindow(hLocalTime, SW_SHOW);
-      ShowWindow(hServerTime, SW_SHOW);
-      ShowWindow(hUpdate, SW_SHOW);
-      ShowWindow(hDelete, SW_SHOW);
+      showItem(hwnd, hCoreName, true);
+      showItem(hwnd, hLocalTime, true);
+      showItem(hwnd, hServerTime, true);
+      showItem(hwnd, hUpdate, true);
+      showItem(hwnd, hDelete, true);
 
       coreNames[index] = pair.second->filename;
       ++index;
 
       if (pair.second->deprecationMessage.empty())
       {
-        SetWindowText(hCoreName, pair.first.c_str());
+        setItemText(hwnd, hCoreName, pair.first.c_str());
       }
       else
       {
         std::string deprecatedName = pair.first + " (Deprecated)";
-        SetWindowText(hCoreName, deprecatedName.c_str());
+        setItemText(hwnd, hCoreName, deprecatedName.c_str());
       }
 
       if (pair.second->filetime)
@@ -465,15 +491,15 @@ protected:
         struct tm tm;
         gmtime_s(&tm, &pair.second->filetime);
         std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm);
-        SetWindowText(hLocalTime, buffer);
-        SetWindowText(hUpdate, "Update");
-        EnableWindow(hDelete, TRUE);
+        setItemText(hwnd, hLocalTime, buffer);
+        setItemText(hwnd, hUpdate, "Update");
+        enableItem(hwnd, hDelete, true);
       }
       else
       {
-        SetWindowText(hLocalTime, "n/a");
-        SetWindowText(hUpdate, "Download");
-        EnableWindow(hDelete, FALSE);
+        setItemText(hwnd, hLocalTime, "n/a");
+        setItemText(hwnd, hUpdate, "Download");
+        enableItem(hwnd, hDelete, false);
       }
 
       if (pair.second->servertime)
@@ -481,39 +507,33 @@ protected:
         struct tm tm;
         gmtime_s(&tm, &pair.second->servertime);
         std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm);
-        SetWindowText(hServerTime, buffer);
+        setItemText(hwnd, hServerTime, buffer);
 
         if (!pair.second->filetime)
         {
-          EnableWindow(hUpdate, TRUE);
+          enableItem(hwnd, hUpdate, true);
         }
         else
         {
           const auto roundedServerTime = pair.second->servertime / 86400;
           const auto roundedFileTime = pair.second->filetime / 86400;
-          EnableWindow(hUpdate, (roundedServerTime > roundedFileTime));
+          enableItem(hwnd, hUpdate, (roundedServerTime > roundedFileTime));
         }
       }
       else
       {
-        SetWindowText(hServerTime, "n/a");
-        EnableWindow(hUpdate, FALSE);
+        setItemText(hwnd, hServerTime, "n/a");
+        enableItem(hwnd, hUpdate, false);
       }
     }
 
     for (; index < coreNames.size(); ++index)
     {
-      HWND hCoreName = GetDlgItem(hwnd, 51000 + index);
-      HWND hLocalTime = GetDlgItem(hwnd, 51100 + index);
-      HWND hServerTime = GetDlgItem(hwnd, 51200 + index);
-      HWND hUpdate = GetDlgItem(hwnd, 51300 + index);
-      HWND hDelete = GetDlgItem(hwnd, 51400 + index);
-
-      ShowWindow(hCoreName, SW_HIDE);
-      ShowWindow(hLocalTime, SW_HIDE);
-      ShowWindow(hServerTime, SW_HIDE);
-      ShowWindow(hUpdate, SW_HIDE);
-      ShowWindow(hDelete, SW_HIDE);
+      showItem(hwnd, 51000 + index, false);
+      showItem(hwnd, 51100 + index, false);
+      showItem(hwnd, 51200 + index, false);
+      showItem(hwnd, 51300 + index, false);
+      showItem(hwnd, 51400 + index, false);
     }
   }
 
@@ -552,6 +572,7 @@ protected:
 
     if (!util::unzipFile(logger, zipPath, coreFile, path))
     {
+#ifdef _WIN32
       const auto unicodePath = util::utf8ToUChar(path);
       if (unicodePath.length() != path.length())
       {
@@ -561,6 +582,10 @@ protected:
       {
         MessageBox(hwnd, "Unzip failed. Please manually unzip the file in the Cores subdirectory and restart RALibRetro.", "Error", MB_OK);
       }
+#else
+      // paths are UTF-8 here, which miniz handles
+        MessageBox(hwnd, "Unzip failed. Please manually unzip the file in the Cores subdirectory and restart RALibRetro.", "Error", MB_OK);
+#endif
     }
     else
     {
@@ -579,6 +604,56 @@ protected:
     updateCores(hwnd);
   }
 
+  // returns true if the command was handled
+  bool handleCoreButton(HWND hwnd, int cmd)
+  {
+    if (cmd < 51300 || cmd >= 51500)
+      return false;
+
+    if (cmd >= 51400)
+    {
+      if (coreNames[cmd - 51400] == *loadedCore)
+      {
+        MessageBox(hwnd, "Cannot delete active core", "Error", MB_OK);
+        return true;
+      }
+
+      deleteCore(hwnd, coreNames[cmd - 51400]);
+    }
+    else
+    {
+      if (coreNames[cmd - 51300] == *loadedCore)
+      {
+        MessageBox(hwnd, "Cannot update active core", "Error", MB_OK);
+        return true;
+      }
+
+      updateCore(hwnd, coreNames[cmd - 51300]);
+    }
+
+    return true;
+  }
+
+#ifndef _WIN32
+  void initControls() override
+  {
+    Dialog::initControls();
+
+    updateCores(nullptr);
+  }
+
+  void onSelectionChanged(DWORD id) override
+  {
+    if (id == 50000)
+      updateCores(nullptr);
+  }
+
+  bool onButton(DWORD id) override
+  {
+    // the download blocks this loop; the dialog stays on screen until it completes
+    return handleCoreButton(g_mainWindow, (int)id);
+  }
+#else
   void initControls(HWND hwnd) override
   {
     Dialog::initControls(hwnd);
@@ -634,6 +709,7 @@ protected:
 
     return Dialog::dialogProc(hwnd, msg, wparam, lparam);
   }
+#endif
 };
 
 static const char* s_getCoreName(int index, void* udata)
@@ -764,16 +840,6 @@ bool showCoresDialog(Config* config, Logger* logger, const std::string& loadedCo
   db.show();
 
   return db.modified;
-}
-
-#elif !defined(_CONSOLE)
-
-// TODO: ImGui version of the core manager
-bool showCoresDialog(Config* config, Logger* logger, const std::string& loadedCore, int selectedSystem)
-{
-  (void)config; (void)loadedCore; (void)selectedSystem;
-  logger->warn(TAG "Core manager dialog is not available yet");
-  return false;
 }
 
 #endif

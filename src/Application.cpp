@@ -1435,14 +1435,18 @@ void Application::refreshMemoryMap()
 
 void Application::unloadCore()
 {
-  std::string json;
-  json.append("{\"core\":");
-  json.append(_config.serialize());
-  json.append(",\"input\":");
-  json.append(_input.serialize());
-  json.append("}");
+  // nothing to save if no core was loaded (this used to write Cores/.json)
+  if (!_coreName.empty())
+  {
+    std::string json;
+    json.append("{\"core\":");
+    json.append(_config.serialize());
+    json.append(",\"input\":");
+    json.append(_input.serialize());
+    json.append("}");
 
-  util::saveFile(&_logger, getCoreConfigPath(_coreName), json.c_str(), json.length());
+    util::saveFile(&_logger, getCoreConfigPath(_coreName), json.c_str(), json.length());
+  }
 
   _memory.destroy();
   _core.destroy();

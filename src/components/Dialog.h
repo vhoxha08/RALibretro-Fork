@@ -68,6 +68,7 @@ protected:
     WORD _x, _y, _w, _h;
     bool _isDefault = false;
     bool _visible = true;
+    bool _enabled = true;
 
     bool* _checked = nullptr;
     GetOption _getOption = nullptr;

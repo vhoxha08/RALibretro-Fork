@@ -244,6 +244,7 @@ void Dialog::render()
     const float h = unitsToPixelsY(cd._type == kEditbox && cd._lines > 1 ? cd._h * cd._lines : cd._h);
     ImGui::SetCursorPos(pos);
     ImGui::PushID((int)(&cd - _controlData.data()));
+    ImGui::BeginDisabled(!cd._enabled);
 
     switch (cd._type)
     {
@@ -314,6 +315,7 @@ void Dialog::render()
         break;
     }
 
+    ImGui::EndDisabled();
     ImGui::PopID();
   }
 
