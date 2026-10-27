@@ -61,6 +61,28 @@ target_include_directories(chdr PUBLIC
 )
 target_compile_definitions(chdr PRIVATE Z7_ST ZSTD_DISABLE_ASM)
 
+# ---- Dear ImGui (menu bar and dialogs outside Windows) --------------------------------------------
+set(IMGUI_DIR src/imgui)
+add_library(imgui STATIC
+  ${IMGUI_DIR}/imgui.cpp
+  ${IMGUI_DIR}/imgui_draw.cpp
+  ${IMGUI_DIR}/imgui_tables.cpp
+  ${IMGUI_DIR}/imgui_widgets.cpp
+  ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(imgui PUBLIC ${IMGUI_DIR})
+target_link_libraries(imgui PUBLIC SDL2::SDL2)
+if(APPLE)
+  target_compile_definitions(imgui PRIVATE GL_SILENCE_DEPRECATION)
+endif()
+
+# ---- nativefiledialog-extended (open/save dialogs outside Windows) ----------------------------------
+set(NFD_INSTALL OFF CACHE BOOL "" FORCE)
+set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(src/nfd EXCLUDE_FROM_ALL)
+
 # ---- RALibretro --------------------------------------------------------------------------------
 set(RCHEEVOS_DIR "${RA_INTEGRATION_DIR}/rcheevos") # same commit as src/rcheevos
 add_executable(RALibretro
@@ -78,6 +100,7 @@ add_executable(RALibretro
   src/dynlib/dynlib.c
   src/Emulator.cpp
   src/Fsm.cpp
+  src/Gui.cpp
   src/Gl.cpp
   src/GlUtil.cpp
   src/Hash.cpp
@@ -90,6 +113,7 @@ add_executable(RALibretro
   src/libretro/Core.cpp
   src/main.cpp
   src/Memory.cpp
+  src/MenuImGui.cpp
   src/Platform.cpp
   src/RA_Implementation.cpp
   src/RA_Interface_Static.cpp
@@ -109,7 +133,7 @@ target_include_directories(RALibretro BEFORE PRIVATE
 )
 target_compile_definitions(RALibretro PRIVATE
   OUTSIDE_SPEEX RANDOM_PREFIX=speex EXPORT= FIXED_POINT HAVE_CHD LOG_TO_FILE)
-target_link_libraries(RALibretro PRIVATE RAIntegrationHeadless chdr SDL2::SDL2 OpenGL::GL ${CMAKE_DL_LIBS})
+target_link_libraries(RALibretro PRIVATE RAIntegrationHeadless chdr imgui nfd SDL2::SDL2 OpenGL::GL ${CMAKE_DL_LIBS})
 
 if(APPLE)
   # OpenGL is deprecated (but available) on macOS

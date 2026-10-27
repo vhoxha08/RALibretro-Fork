@@ -53,6 +53,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "Platform.h"
 #include "RA_Interface_Host.h"
+#include "Gui.h"
 
 #define TAG "[APP] "
 
@@ -310,6 +311,19 @@ bool Application::init(const char* title, int width, int height)
 
   inited = kVideoInited;
 
+#ifndef _WIN32
+  // the frontend GL context is current after _videoContext.init
+  if (!gui::init(_window, SDL_GL_GetCurrentContext()))
+  {
+    _logger.error(TAG "Failed to initialize the GUI");
+    goto error;
+  }
+
+  gui::setMenuRenderer([this]() { drawMenuBar(); });
+  gui::setRedraw([this]() { _video.redraw(); });
+  _video.setOverlayRenderer(gui::render);
+#endif
+
   {
 #ifdef _WIN32
     _cdRomMenu = GetSubMenu(GetSubMenu(_menu, 0), CDROM_MENU_INDEX);
@@ -388,6 +402,12 @@ void Application::processEvents()
 
   do
   {
+#ifndef _WIN32
+    // input the GUI uses (an open menu, a text field) does not reach the game
+    if (gui::processEvent(event))
+      continue;
+
+#endif
     switch (event.type)
     {
       case SDL_QUIT:
@@ -599,6 +619,9 @@ void Application::run()
       // run work the toolkit queued for this thread (on Windows its DLL uses the Win32 message loop)
       RA_ProcessUIThreadActions();
 #endif
+#ifndef _WIN32
+      runPendingCommand();
+#endif
 
       switch (_fsm.currentState())
       {
@@ -614,6 +637,7 @@ void Application::run()
           // do no frames
           Sleep(1000 / 60); // assume 60fps
 
+#ifdef _WIN32
           // if a message is on-screen, force repaint to advance the message animation
           if (_video.hasMessage())
           {
@@ -623,6 +647,10 @@ void Application::run()
             if (!_video.hasMessage())
               _video.redraw();
           }
+#else
+          // also repaints the GUI (menu, dialogs) and advances on-screen messages
+          _video.redraw();
+#endif
           break;
 
         case Fsm::State::FrameStep:
@@ -739,6 +767,10 @@ void Application::destroy()
   if (_gameData)
     free(_gameData);
 
+#ifndef _WIN32
+  _video.setOverlayRenderer(nullptr);
+  gui::destroy();
+#endif
   _video.destroy();
   _keybinds.destroy();
   _input.destroy();
@@ -958,43 +990,71 @@ bool Application::validateHardcoreEnablement()
   return false;
 }
 
-void Application::updateMenu()
+// menu items that updateMenu enables or disables depending on the FSM state
+static const UINT all_items[] =
 {
-  static const UINT all_items[] =
-  {
     IDM_LOAD_GAME,
     IDM_PAUSE_GAME, IDM_RESUME_GAME, IDM_RESET_GAME,
     IDM_EXIT,
 
     IDM_CORE_CONFIG, IDM_TURBO_GAME, IDM_ABOUT
-  };
+};
 
-  static const UINT start_items[] =
-  {
+static const UINT start_items[] =
+{
     IDM_EXIT, IDM_ABOUT
-  };
+};
 
-  static const UINT core_loaded_items[] =
-  {
+static const UINT core_loaded_items[] =
+{
     IDM_LOAD_GAME, IDM_EXIT, IDM_CORE_CONFIG, IDM_ABOUT
-  };
+};
 
-  static const UINT game_running_items[] =
-  {
+static const UINT game_running_items[] =
+{
     IDM_LOAD_GAME, IDM_PAUSE_GAME, IDM_RESET_GAME,
     IDM_EXIT,
 
     IDM_CORE_CONFIG, IDM_TURBO_GAME, IDM_ABOUT
-  };
+};
 
-  static const UINT game_paused_items[] =
-  {
+static const UINT game_paused_items[] =
+{
     IDM_LOAD_GAME, IDM_RESUME_GAME, IDM_RESET_GAME,
     IDM_EXIT,
 
     IDM_CORE_CONFIG, IDM_TURBO_GAME, IDM_ABOUT
-  };
+};
 
+template<size_t N>
+static bool containsItem(const UINT (&items)[N], unsigned id)
+{
+  for (UINT item : items)
+  {
+    if (item == id)
+      return true;
+  }
+  return false;
+}
+
+bool Application::isMenuCommandEnabled(unsigned id)
+{
+  if (!containsItem(all_items, id))
+    return true;
+
+  switch (_fsm.currentState())
+  {
+  case Fsm::State::Start:           return containsItem(start_items, id);
+  case Fsm::State::CoreLoaded:      return containsItem(core_loaded_items, id);
+  case Fsm::State::GameRunning:     return containsItem(game_running_items, id);
+  case Fsm::State::GamePaused:
+  case Fsm::State::GamePausedNoOvl: return containsItem(game_paused_items, id);
+  default:                          return false;
+  }
+}
+
+void Application::updateMenu()
+{
   enableItems(all_items, sizeof(all_items) / sizeof(all_items[0]), MF_DISABLED);
 
   switch (_fsm.currentState())
@@ -2364,6 +2424,9 @@ void Application::resizeWindow(unsigned multiplier)
 void Application::resizeWindow(int width, int height)
 {
   int actual_width, actual_height;
+#ifndef _WIN32
+  height += gui::menuBarHeight(); // the requested size is for the game image
+#endif
   SDL_SetWindowSize(_window, width, height);
 
   /* SDL_SetWindowSize does not always account for the menu size correctly - especially if it wraps
@@ -2384,6 +2447,8 @@ void Application::toggleFullscreen()
   {
 #ifdef _WIN32
     SetMenu(g_mainWindow, _menu);
+#else
+    gui::setMenuBarVisible(true);
 #endif
     SDL_ShowCursor(SDL_ENABLE);
   }
@@ -2394,6 +2459,8 @@ void Application::toggleFullscreen()
   {
 #ifdef _WIN32
     SetMenu(g_mainWindow, NULL);
+#else
+    gui::setMenuBarVisible(false);
 #endif
     SDL_ShowCursor(SDL_DISABLE);
   }
@@ -2606,7 +2673,12 @@ void Application::handle(const SDL_WindowEvent* window)
 {
   if (window->event == SDL_WINDOWEVENT_SIZE_CHANGED)
   {
+#ifdef _WIN32
     _video.windowResized(window->data1, window->data2);
+#else
+    // the ImGui menu bar is drawn inside the window, above the game image
+    _video.windowResized(window->data1, window->data2 - gui::menuBarHeight());
+#endif
   }
 }
 

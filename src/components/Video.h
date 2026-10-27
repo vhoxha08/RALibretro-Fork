@@ -25,6 +25,8 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <SDL_opengl.h>
 
+#include <functional>
+
 class Video: public libretro::VideoComponent
 {
 public:
@@ -37,6 +39,10 @@ public:
 
   void clear();
   void redraw();
+
+  // Called before every buffer swap with the frontend GL context current. Used to draw the ImGui menu
+  // and dialogs outside Windows.
+  void setOverlayRenderer(std::function<void()> renderer) { _overlayRenderer = std::move(renderer); }
 
   virtual bool setGeometry(unsigned width, unsigned height, unsigned maxWidth, unsigned maxHeight, float aspect, enum retro_pixel_format pixelFormat, const struct retro_hw_render_callback* hwRenderCallback) override;
   virtual void refresh(const void* data, unsigned width, unsigned height, size_t pitch) override;
@@ -118,6 +124,7 @@ protected:
   float                   _aspect;
   Rotation                _rotation;
   RotationHandler         _rotationHandler;
+  std::function<void()>   _overlayRenderer;
 
   bool                    _preserveAspect;
   bool                    _linearFilter;

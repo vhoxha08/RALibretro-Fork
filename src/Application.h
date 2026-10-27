@@ -121,6 +121,14 @@ protected:
   void        handle(const SDL_SysWMEvent* syswm);
 #endif
   void        handleCommand(unsigned cmd);
+  bool        isMenuCommandEnabled(unsigned id);
+#ifndef _WIN32
+  void        drawMenuBar();
+  void        drawSystemsMenu();
+  void        drawDiscMenu();
+  void        menuItem(const char* label, unsigned id, bool enabled = true, bool checked = false);
+  void        runPendingCommand();
+#endif
   void        handle(const SDL_WindowEvent* window);
   void        handle(const SDL_MouseMotionEvent* motion);
   void        handle(const SDL_MouseButtonEvent* button);
@@ -187,6 +195,7 @@ protected:
   HMENU _cdRomMenu;
 #ifndef _WIN32
   bool _fastForwardChecked = false; // the Windows build keeps this in the Turbo menu item
+  unsigned _pendingCommand = 0;     // menu selection, handled after the GUI frame is drawn
 #endif
 
   int _absViewMouseX;

@@ -21,6 +21,12 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Dialog.h"
 
+#include "Application.h"
+#include "Gui.h"
+
+#include <imgui.h>
+#include <misc/cpp/imgui_stdlib.h>
+
 #include <cstring>
 
 Dialog::Dialog() = default;
@@ -201,17 +207,149 @@ void Dialog::retrieveData()
   }
 }
 
+// Dialog layouts are in Win32 dialog units: 1/4 of the average character width horizontally and 1/8 of the
+// font height vertically.
+static float unitsToPixelsX(WORD units) { return units * ImGui::GetFontSize() * 0.5f / 4.0f * 1.15f; }
+static float unitsToPixelsY(WORD units) { return units * ImGui::GetFontSize() / 8.0f * 1.15f; }
+
 void Dialog::render()
 {
-  // implemented with ImGui (task: port settings dialogs)
+  const ImVec2 origin = ImGui::GetCursorPos();
+  const float width = unitsToPixelsX(_width);
+  const float height = unitsToPixelsY(_height);
+  ImGui::Dummy(ImVec2(width, height)); // reserve the dialog area so the window sizes itself
+
+  const bool enterPressed = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter);
+  const bool escapePressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
+  DWORD clicked = 0;
+
+  for (auto& cd : _controlData)
+  {
+    const ImVec2 pos(origin.x + unitsToPixelsX(cd._x), origin.y + unitsToPixelsY(cd._y));
+    const float w = unitsToPixelsX(cd._w);
+    const float h = unitsToPixelsY(cd._type == kEditbox && cd._lines > 1 ? cd._h * cd._lines : cd._h);
+    ImGui::SetCursorPos(pos);
+    ImGui::PushID((int)(&cd - _controlData.data()));
+
+    switch (cd._type)
+    {
+      case kLabel:
+        ImGui::PushTextWrapPos(pos.x + w);
+        ImGui::TextUnformatted(cd._caption.c_str());
+        ImGui::PopTextWrapPos();
+        break;
+
+      case kCheckbox:
+        ImGui::Checkbox(cd._caption.c_str(), &cd._checkedValue);
+        break;
+
+      case kCombobox:
+      {
+        ImGui::SetNextItemWidth(w);
+        const char* preview = (cd._selectedValue >= 0 && cd._selectedValue < (int)cd._options.size())
+          ? cd._options[cd._selectedValue].c_str() : "";
+        if (ImGui::BeginCombo("##combo", preview))
+        {
+          for (int i = 0; i < (int)cd._options.size(); ++i)
+          {
+            const bool selected = (i == cd._selectedValue);
+            if (ImGui::Selectable(cd._options[i].c_str(), selected))
+              cd._selectedValue = i;
+            if (selected)
+              ImGui::SetItemDefaultFocus();
+          }
+          ImGui::EndCombo();
+        }
+        break;
+      }
+
+      case kEditbox:
+      {
+        const ImGuiInputTextFlags flags = cd._readOnly ? ImGuiInputTextFlags_ReadOnly : ImGuiInputTextFlags_None;
+        if (cd._lines > 1)
+        {
+          ImGui::InputTextMultiline("##edit", &cd._text, ImVec2(w, h), flags);
+        }
+        else
+        {
+          ImGui::SetNextItemWidth(w);
+          ImGui::InputText("##edit", &cd._text, flags);
+        }
+        break;
+      }
+
+      case kButton:
+        if (cd._isDefault)
+          ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        if (ImGui::Button(cd._caption.c_str(), ImVec2(w, h)))
+          clicked = cd._id;
+        if (cd._isDefault)
+          ImGui::PopStyleColor();
+        break;
+    }
+
+    ImGui::PopID();
+  }
+
+  // keyboard shortcuts of a Win32 dialog: Enter presses the default button, Escape cancels
+  if (clicked == 0 && !ImGui::IsAnyItemActive())
+  {
+    if (enterPressed)
+    {
+      for (const auto& cd : _controlData)
+      {
+        if (cd._type == kButton && cd._isDefault)
+          clicked = cd._id;
+      }
+    }
+    else if (escapePressed)
+    {
+      clicked = IDCANCEL;
+    }
+  }
+
+  if (clicked == IDOK)
+  {
+    retrieveData();
+    close(IDOK);
+  }
+  else if (clicked == IDCANCEL)
+  {
+    close(IDCANCEL);
+  }
+  else if (clicked != 0)
+  {
+    onButton(clicked);
+  }
 }
 
 bool Dialog::show()
 {
-  // TODO: run the dialog as a modal ImGui window
+  extern Application app;
+  const bool hasBackgroundInput = app.config().getBackgroundInput();
+
+  if (hasBackgroundInput) /* disable background input while dialog is open */
+    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "0");
+
   _updated = false;
   _closed = false;
+  _result = 0;
   initControls();
+
+  gui::runModal(_title.c_str(),
+    [this]()
+    {
+      render();
+      if (!_closed)
+        onFrame();
+      return !_closed;
+    },
+    [this](const SDL_Event& event) { return onEvent(event); });
+
   markClosed();
+
+  if (hasBackgroundInput)
+    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+
   return _updated;
 }

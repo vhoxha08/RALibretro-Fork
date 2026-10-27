@@ -185,6 +185,9 @@ void Video::clear()
   Gl::clearColor(0.0, 0.0, 0.0, 1.0);
   Gl::clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+  if (_overlayRenderer)
+    _overlayRenderer();
+
   _ctx->enableCoreContext(true);
   _ctx->swapBuffers();
 }
@@ -198,6 +201,17 @@ void Video::redraw()
 
 void Video::draw(bool force)
 {
+  if (_texture == 0 && _overlayRenderer)
+  {
+    // nothing to show yet, but the overlay (menu) still has to be drawn
+    Gl::bindFramebuffer(GL_FRAMEBUFFER, 0);
+    Gl::clearColor(0.0, 0.0, 0.0, 1.0);
+    Gl::clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    _overlayRenderer();
+    _ctx->swapBuffers();
+    return;
+  }
+
   if (_texture != 0 && (force || _enabled))
   {
     Gl::bindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -275,6 +289,9 @@ void Video::draw(bool force)
     Gl::bindTexture(GL_TEXTURE_2D, 0);
     Gl::bindVertexArray(0);
     Gl::useProgram(0);
+
+    if (_overlayRenderer)
+      _overlayRenderer();
 
     _ctx->swapBuffers();
   }

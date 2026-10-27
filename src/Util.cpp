@@ -38,6 +38,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <dirent.h>
 #ifndef _CONSOLE
 #include <curl/curl.h>
+#include <nfd.h>
 #endif
 #include <filesystem>
 #endif
@@ -851,15 +852,95 @@ std::string util::saveFileDialog(HWND hWnd, const std::string& extensionsFilter,
   return "";
 }
 #elif !defined(_CONSOLE)
-// TODO: native file dialogs (nativefiledialog-extended)
-std::string util::openFileDialog(HWND, const std::string&, const std::string&)
+// Converts a Win32 filter ("Description\0*.a;*.b\0...\0\0") into nativefiledialog-extended filters
+// ("a,b"). Catch-all "*.*" entries are skipped; with no filters every file can be selected.
+static void parseFilter(const std::string& extensionsFilter, std::vector<std::string>& names, std::vector<std::string>& specs)
 {
-  return std::string();
+  size_t pos = 0;
+  while (pos < extensionsFilter.size() && extensionsFilter[pos] != '\0')
+  {
+    const std::string name = extensionsFilter.c_str() + pos;
+    pos += name.size() + 1;
+    if (pos >= extensionsFilter.size())
+      break;
+
+    const std::string patterns = extensionsFilter.c_str() + pos;
+    pos += patterns.size() + 1;
+
+    std::string spec;
+    size_t start = 0;
+    while (start <= patterns.size())
+    {
+      size_t end = patterns.find(';', start);
+      if (end == std::string::npos)
+        end = patterns.size();
+
+      std::string pattern = patterns.substr(start, end - start);
+      if (pattern.compare(0, 2, "*.") == 0)
+        pattern.erase(0, 2);
+      if (!pattern.empty() && pattern != "*")
+      {
+        if (!spec.empty())
+          spec.push_back(',');
+        spec += pattern;
+      }
+
+      start = end + 1;
+    }
+
+    if (!spec.empty())
+    {
+      names.push_back(name);
+      specs.push_back(spec);
+    }
+  }
 }
 
-std::string util::saveFileDialog(HWND, const std::string&, const char*, const std::string&)
+static std::string runFileDialog(const std::string& extensionsFilter, const char* defaultExtension,
+                                 const std::string& initialDirectory, bool save)
 {
-  return std::string();
+  std::vector<std::string> names, specs;
+  parseFilter(extensionsFilter, names, specs);
+
+  std::vector<nfdu8filteritem_t> filters;
+  for (size_t i = 0; i < names.size(); ++i)
+    filters.push_back({names[i].c_str(), specs[i].c_str()});
+
+  if (NFD_Init() != NFD_OKAY)
+    return std::string();
+
+  nfdu8char_t* outPath = nullptr;
+  const char* defaultPath = initialDirectory.empty() ? nullptr : initialDirectory.c_str();
+  const nfdresult_t result = save
+    ? NFD_SaveDialogU8(&outPath, filters.data(), (nfdfiltersize_t)filters.size(), defaultPath, nullptr)
+    : NFD_OpenDialogU8(&outPath, filters.data(), (nfdfiltersize_t)filters.size(), defaultPath);
+
+  std::string path;
+  if (result == NFD_OKAY && outPath != nullptr)
+  {
+    path = outPath;
+    NFD_FreePathU8(outPath);
+
+    // like the Win32 dialog, add the default extension if the user didn't type one
+    if (save && defaultExtension && *defaultExtension && util::extension(path).empty())
+    {
+      path.push_back('.');
+      path += defaultExtension;
+    }
+  }
+
+  NFD_Quit();
+  return path;
+}
+
+std::string util::openFileDialog(HWND, const std::string& extensionsFilter, const std::string& initialDirectory)
+{
+  return runFileDialog(extensionsFilter, nullptr, initialDirectory, false);
+}
+
+std::string util::saveFileDialog(HWND, const std::string& extensionsFilter, const char* defaultExtension, const std::string& initialDirectory)
+{
+  return runFileDialog(extensionsFilter, defaultExtension, initialDirectory, true);
 }
 #endif
 
