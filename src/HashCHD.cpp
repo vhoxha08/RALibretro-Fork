@@ -24,7 +24,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <libchdr/include/libchdr/chd.h>
 
-#include <memory.h>
+#include <string.h>
 #include <stdlib.h>
 #include <string.h>
 #include <algorithm>

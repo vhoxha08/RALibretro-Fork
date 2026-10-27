@@ -115,3 +115,11 @@ if(APPLE)
   # OpenGL is deprecated (but available) on macOS
   target_compile_definitions(RALibretro PRIVATE GL_SILENCE_DEPRECATION)
 endif()
+
+# Make the build folder a "portable" install: RALibretro uses the executable's folder as its root
+# when it contains Cores/ (with cores.json describing the known cores).
+add_custom_command(TARGET RALibretro POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:RALibretro>/Cores
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/etc/cores.json
+          $<TARGET_FILE_DIR:RALibretro>/Cores/cores.json
+)

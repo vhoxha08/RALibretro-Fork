@@ -65,6 +65,12 @@ void loadROM(const char* path)
 
 extern "C" void abort_handler(int signal_number)
 {
+  // cleaning up can itself fail and abort again; only try once
+  static bool handling = false;
+  if (handling)
+    return;
+  handling = true;
+
   app.logger().error("[APP] abort() called");
   app.unloadCore();
   app.destroy();

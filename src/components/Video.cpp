@@ -802,6 +802,27 @@ void Video::setRotation(Rotation rotation)
 
 GLuint Video::createProgram(GLint* pos, GLint* uv, GLint* tex)
 {
+#ifndef _WIN32
+  // macOS (and Mesa) only accept versioned GLSL in a core profile context
+  static const char* vertexShader =
+    "#version 150\n"
+    "in vec2 a_pos;\n"
+    "in vec2 a_uv;\n"
+    "out vec2 v_uv;\n"
+    "void main() {\n"
+    "  v_uv = a_uv;\n"
+    "  gl_Position = vec4(a_pos, 0.0, 1.0);\n"
+    "}";
+
+  static const char* fragmentShader =
+    "#version 150\n"
+    "in vec2 v_uv;\n"
+    "uniform sampler2D u_tex;\n"
+    "out vec4 fragColor;\n"
+    "void main() {\n"
+    "  fragColor = texture(u_tex, v_uv);\n"
+    "}";
+#else
   static const char* vertexShader =
     "attribute vec2 a_pos;\n"
     "attribute vec2 a_uv;\n"
@@ -817,6 +838,7 @@ GLuint Video::createProgram(GLint* pos, GLint* uv, GLint* tex)
     "void main() {\n"
     "  gl_FragColor = texture2D(u_tex, v_uv);\n"
     "}";
+#endif
   
   GLuint program = GlUtil::createProgram(vertexShader, fragmentShader);
 

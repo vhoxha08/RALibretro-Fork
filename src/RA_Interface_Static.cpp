@@ -28,27 +28,30 @@ void RA_InstallSharedFunctions(int (*)(void), void (*fpCauseUnpause)(void), void
                                void (*fpRebuildMenu)(void), void (*fpEstimateTitle)(char*),
                                void (*fpResetEmulation)(void), void (*fpLoadROM)(const char*))
 {
-    _RA_InstallSharedFunctionsExt(nullptr, fpCauseUnpause, fpCausePause, fpRebuildMenu, fpEstimateTitle,
+    if (g_bInitialized)
+            _RA_InstallSharedFunctionsExt(nullptr, fpCauseUnpause, fpCausePause, fpRebuildMenu, fpEstimateTitle,
                                   fpResetEmulation, fpLoadROM);
 }
 
-void RA_SetForceRepaint(int bEnable) { _RA_SetForceRepaint(bEnable); }
+void RA_SetForceRepaint(int bEnable) { if (g_bInitialized) _RA_SetForceRepaint(bEnable); }
 HMENU RA_CreatePopupMenu(void) { return nullptr; } // no Win32 menus; use RA_GetPopupMenuItems
-int RA_GetPopupMenuItems(RA_MenuItem* pItems) { return _RA_GetPopupMenuItems(pItems); }
-void RA_InvokeDialog(LPARAM nID) { _RA_InvokeDialog(nID); }
-void RA_SetUserAgentDetail(const char* sDetail) { _RA_SetUserAgentDetail(sDetail); }
-void RA_AttemptLogin(int bBlocking) { _RA_AttemptLogin(bBlocking); }
-void RA_SetConsoleID(unsigned int nConsoleID) { _RA_SetConsoleID(nConsoleID); }
-void RA_ClearMemoryBanks(void) { _RA_ClearMemoryBanks(); }
+int RA_GetPopupMenuItems(RA_MenuItem* pItems) { return g_bInitialized ? _RA_GetPopupMenuItems(pItems) : 0; }
+void RA_InvokeDialog(LPARAM nID) { if (g_bInitialized) _RA_InvokeDialog(nID); }
+void RA_SetUserAgentDetail(const char* sDetail) { if (g_bInitialized) _RA_SetUserAgentDetail(sDetail); }
+void RA_AttemptLogin(int bBlocking) { if (g_bInitialized) _RA_AttemptLogin(bBlocking); }
+void RA_SetConsoleID(unsigned int nConsoleID) { if (g_bInitialized) _RA_SetConsoleID(nConsoleID); }
+void RA_ClearMemoryBanks(void) { if (g_bInitialized) _RA_ClearMemoryBanks(); }
 
 void RA_InstallMemoryBank(int nBankID, RA_ReadMemoryFunc pReader, RA_WriteMemoryFunc pWriter, int nBankSize)
 {
-    _RA_InstallMemoryBank(nBankID, reinterpret_cast<void*>(pReader), reinterpret_cast<void*>(pWriter), nBankSize);
+    if (g_bInitialized)
+            _RA_InstallMemoryBank(nBankID, reinterpret_cast<void*>(pReader), reinterpret_cast<void*>(pWriter), nBankSize);
 }
 
 void RA_InstallMemoryBankBlockReader(int nBankID, RA_ReadMemoryBlockFunc pReader)
 {
-    _RA_InstallMemoryBankBlockReader(nBankID, reinterpret_cast<void*>(pReader));
+    if (g_bInitialized)
+            _RA_InstallMemoryBankBlockReader(nBankID, reinterpret_cast<void*>(pReader));
 }
 
 void RA_Shutdown(void)
@@ -67,28 +70,29 @@ void RA_Shutdown(void)
     g_bInitialized = false;
 }
 
-int RA_IsOverlayFullyVisible(void) { return _RA_IsOverlayFullyVisible(); }
-void RA_SetPaused(bool bIsPaused) { _RA_SetPaused(bIsPaused ? 1 : 0); }
-void RA_NavigateOverlay(struct ControllerInput* pInput) { _RA_NavigateOverlay(pInput); }
+int RA_IsOverlayFullyVisible(void) { return g_bInitialized ? _RA_IsOverlayFullyVisible() : 0; }
+void RA_SetPaused(bool bIsPaused) { if (g_bInitialized) _RA_SetPaused(bIsPaused ? 1 : 0); }
+void RA_NavigateOverlay(struct ControllerInput* pInput) { if (g_bInitialized) _RA_NavigateOverlay(pInput); }
 
 void RA_UpdateRenderOverlay(HDC, struct ControllerInput* pInput, float, RECT*, bool, bool)
 {
-    _RA_NavigateOverlay(pInput);
+    if (g_bInitialized)
+        _RA_NavigateOverlay(pInput);
 }
 
-void RA_UpdateHWnd(HWND hMainHWND) { _RA_UpdateHWnd(hMainHWND); }
-unsigned int RA_IdentifyRom(BYTE* pROMData, unsigned int nROMSize) { return _RA_IdentifyRom(pROMData, nROMSize); }
-unsigned int RA_IdentifyHash(const char* sHash) { return _RA_IdentifyHash(sHash); }
-void RA_ActivateGame(unsigned int nGameId) { _RA_ActivateGame(nGameId); }
-void RA_OnLoadNewRom(BYTE* pROMData, unsigned int nROMSize) { _RA_OnLoadNewRom(pROMData, nROMSize); }
-int RA_ConfirmLoadNewRom(int bIsQuitting) { return _RA_ConfirmLoadNewRom(bIsQuitting); }
-void RA_DoAchievementsFrame(void) { _RA_DoAchievementsFrame(); }
-void RA_SuspendRepaint(void) { _RA_SuspendRepaint(); }
-void RA_ResumeRepaint(void) { _RA_ResumeRepaint(); }
+void RA_UpdateHWnd(HWND hMainHWND) { if (g_bInitialized) _RA_UpdateHWnd(hMainHWND); }
+unsigned int RA_IdentifyRom(BYTE* pROMData, unsigned int nROMSize) { return g_bInitialized ? _RA_IdentifyRom(pROMData, nROMSize) : 0; }
+unsigned int RA_IdentifyHash(const char* sHash) { return g_bInitialized ? _RA_IdentifyHash(sHash) : 0; }
+void RA_ActivateGame(unsigned int nGameId) { if (g_bInitialized) _RA_ActivateGame(nGameId); }
+void RA_OnLoadNewRom(BYTE* pROMData, unsigned int nROMSize) { if (g_bInitialized) _RA_OnLoadNewRom(pROMData, nROMSize); }
+int RA_ConfirmLoadNewRom(int bIsQuitting) { return g_bInitialized ? _RA_ConfirmLoadNewRom(bIsQuitting) : 1; }
+void RA_DoAchievementsFrame(void) { if (g_bInitialized) _RA_DoAchievementsFrame(); }
+void RA_SuspendRepaint(void) { if (g_bInitialized) _RA_SuspendRepaint(); }
+void RA_ResumeRepaint(void) { if (g_bInitialized) _RA_ResumeRepaint(); }
 void RA_HandleHTTPResults(void) {}
-void RA_UpdateAppTitle(const char* sCustomMessage) { _RA_UpdateAppTitle(sCustomMessage); }
-const char* RA_UserName(void) { return _RA_UserName(); }
-int RA_HardcoreModeIsActive(void) { return _RA_HardcoreModeIsActive(); }
+void RA_UpdateAppTitle(const char* sCustomMessage) { if (g_bInitialized) _RA_UpdateAppTitle(sCustomMessage); }
+const char* RA_UserName(void) { return g_bInitialized ? _RA_UserName() : ""; }
+int RA_HardcoreModeIsActive(void) { return g_bInitialized ? _RA_HardcoreModeIsActive() : 0; }
 
 int RA_WarnDisableHardcore(const char* sActivity)
 {
@@ -103,11 +107,31 @@ int RA_WarnDisableHardcore(const char* sActivity)
 void RA_DisableHardcore(void)
 {
     // passing nullptr just disables hardcore mode without prompting.
-    _RA_WarnDisableHardcore(nullptr);
+    if (g_bInitialized)
+        _RA_WarnDisableHardcore(nullptr);
 }
 
-void RA_OnReset(void) { _RA_OnReset(); }
-void RA_OnSaveState(const char* sFilename) { _RA_OnSaveState(sFilename); }
-void RA_OnLoadState(const char* sFilename) { _RA_OnLoadState(sFilename); }
-int RA_CaptureState(char* pBuffer, int nBufferSize) { return _RA_CaptureState(pBuffer, nBufferSize); }
-void RA_RestoreState(const char* pBuffer) { _RA_RestoreState(pBuffer); }
+void RA_OnReset(void) { if (g_bInitialized) _RA_OnReset(); }
+void RA_OnSaveState(const char* sFilename) { if (g_bInitialized) _RA_OnSaveState(sFilename); }
+void RA_OnLoadState(const char* sFilename) { if (g_bInitialized) _RA_OnLoadState(sFilename); }
+int RA_CaptureState(char* pBuffer, int nBufferSize) { return g_bInitialized ? _RA_CaptureState(pBuffer, nBufferSize) : 0; }
+void RA_RestoreState(const char* pBuffer) { if (g_bInitialized) _RA_RestoreState(pBuffer); }
+
+// ---- host integration (RA_Interface_Host.h) ----
+
+#include "RA_Interface_Host.h"
+
+void RA_SetBaseDirectory(const char* utf8Path) { _RA_SetBaseDirectory(utf8Path); }
+void RA_ProcessUIThreadActions(void) { _RA_ProcessUIThreadActions(); }
+
+void RA_SetClipboardHandlers(void (*setText)(const char*), const char* (*getText)(void))
+{
+    if (g_bInitialized)
+        _RA_SetClipboardHandlers(setText, getText);
+}
+
+void RA_SetAudioHandlers(void (*playFile)(const char*), void (*beep)(void))
+{
+    if (g_bInitialized)
+        _RA_SetAudioHandlers(playFile, beep);
+}

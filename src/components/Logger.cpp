@@ -25,7 +25,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <chrono>
 #endif
 
-#include <memory.h>
+#include <string.h>
 #include <string.h>
 
 /* must be less than RING_LOG_MAX_BUFFER_SIZE */

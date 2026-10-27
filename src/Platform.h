@@ -63,6 +63,10 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
  int MessageBox(HWND hWnd, const char* text, const char* caption, unsigned int type);
 
+ // Connects the statically linked toolkit's clipboard and sounds to SDL (call after RA_Init)
+ void installHostServices();
+ void shutdownHostServices();
+
  // Microsoft's argument order (result first)
  #include <errno.h>
  #include <time.h>

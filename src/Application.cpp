@@ -52,6 +52,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <shlobj.h>
 #endif
 #include "Platform.h"
+#include "RA_Interface_Host.h"
 
 #define TAG "[APP] "
 
@@ -324,7 +325,14 @@ bool Application::init(const char* title, int width, int height)
     buildSystemsMenu();
 
     extern void RA_Init(HWND hwnd);
+#ifndef _WIN32
+    // keep RACache next to the other RALibretro folders, like the Windows build
+    RA_SetBaseDirectory(_config.getRootFolder());
+#endif
     RA_Init(g_mainWindow);
+#ifndef _WIN32
+    installHostServices();
+#endif
   }
 
   if (!_memory.init(&_logger))
@@ -587,6 +595,10 @@ void Application::run()
     {
       // handle any pending events
       processEvents();
+#ifndef _WIN32
+      // run work the toolkit queued for this thread (on Windows its DLL uses the Win32 message loop)
+      RA_ProcessUIThreadActions();
+#endif
 
       switch (_fsm.currentState())
       {
@@ -720,6 +732,9 @@ void Application::destroy()
   saveConfiguration();
 
   RA_Shutdown();
+#ifndef _WIN32
+  shutdownHostServices();
+#endif
 
   if (_gameData)
     free(_gameData);
@@ -1858,7 +1873,7 @@ std::string Application::getDiscLabel(unsigned index) const
   }
   else
   {
-    discLabel = "Disc " + index;
+    discLabel = "Disc " + std::to_string(index + 1);
   }
 
   return discLabel;

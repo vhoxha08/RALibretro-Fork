@@ -26,7 +26,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <rc_hash.h>
 #include <rcheevos/src/libretro/rc_libretro.h>
 
-#include <memory.h>
+#include <string.h>
 #include <string.h>
 
 #ifdef _WINDOWS
