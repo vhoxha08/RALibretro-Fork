@@ -185,6 +185,11 @@ void Application::runPendingCommand()
 
   const unsigned cmd = _pendingCommand;
   _pendingCommand = 0;
+
+  // the quit request may have been handled in the same pass; the core is gone by then
+  if (_fsm.currentState() == Fsm::State::Quit)
+    return;
+
   handleCommand(cmd);
 }
 
@@ -237,11 +242,11 @@ void Application::drawMenuBar()
       for (unsigned i = 0; i < 10; ++i)
       {
         const std::string caption = "Slot #" + std::to_string(i + 1);
-        menuItem(caption.c_str(), IDM_SAVE_STATE_1 + i);
+        menuItem(caption.c_str(), IDM_SAVE_STATE_1 + i, isGameActive());
       }
       ImGui::EndMenu();
     }
-    menuItem("Save Game State...", IDM_SAVE_STATE);
+    menuItem("Save Game State...", IDM_SAVE_STATE, isGameActive());
 
     if (ImGui::BeginMenu("Load Game State"))
     {

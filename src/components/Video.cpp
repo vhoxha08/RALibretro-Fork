@@ -951,7 +951,14 @@ bool Video::ensureVertexArray(unsigned windowWidth, unsigned windowHeight, float
     _vertexArray = 0;
   }
 
-  if (_hw.enabled)
+#ifdef _WIN32
+  const bool needVertexArray = _hw.enabled;
+#else
+  // core profile contexts (macOS, Mesa) have no default vertex array object, even for software cores
+  const bool needVertexArray = true;
+#endif
+
+  if (needVertexArray)
   {
     Gl::genVertexArray(1, &_vertexArray);
     if (_vertexArray == 0)

@@ -322,6 +322,14 @@ bool Application::init(const char* title, int width, int height)
   gui::setMenuRenderer([this]() { drawMenuBar(); });
   gui::setRedraw([this]() { _video.redraw(); });
   _video.setOverlayRenderer(gui::render);
+
+  // the Win32 build learns the initial size from the resize caused by attaching its menu; there is no such
+  // event here, so tell the video component now (minus the menu bar)
+  {
+    int windowWidth, windowHeight;
+    SDL_GetWindowSize(_window, &windowWidth, &windowHeight);
+    _video.windowResized(windowWidth, windowHeight - gui::menuBarHeight());
+  }
 #endif
 
   {
@@ -541,6 +549,11 @@ void Application::runSmoothed()
     _processingEvents = true;
     processEvents();
     _processingEvents = false;
+#ifndef _WIN32
+    // this loop replaces run()'s while a game is running, so do the same per-frame work here
+    RA_ProcessUIThreadActions();
+    runPendingCommand();
+#endif
     if (_fsm.currentState() != Fsm::State::GameRunning)
       return;
 

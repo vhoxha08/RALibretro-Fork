@@ -121,9 +121,12 @@ int gui::menuBarHeight()
   if (!s_initialized || !s_menuBarVisible)
     return 0;
 
-  // same as ImGui::GetFrameHeight(), which is only valid inside a frame
+  // same as ImGui::GetFrameHeight(), which is only valid inside a frame. The font size is not known before
+  // the first frame, so assume the size of the default font (13px) until then.
   const ImGuiStyle& style = ImGui::GetStyle();
-  return (int)(style.FontSizeBase + style.FramePadding.y * 2.0f + 0.5f);
+  const float fontSize = (ImGui::GetFontSize() > 0.0f) ? ImGui::GetFontSize() :
+                         (style.FontSizeBase > 0.0f) ? style.FontSizeBase : 13.0f;
+  return (int)(fontSize + style.FramePadding.y * 2.0f + 0.5f);
 }
 
 void gui::setMenuBarVisible(bool visible)
