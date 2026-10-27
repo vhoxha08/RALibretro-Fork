@@ -35,4 +35,10 @@ void RA_SetClipboardHandlers(void (*setText)(const char* utf8Text), const char* 
 // Sound playback. playFile receives the absolute path of a .wav file.
 void RA_SetAudioHandlers(void (*playFile)(const char* utf8Path), void (*beep)(void));
 
+// Draws the toolkit's windows; call inside the Dear ImGui frame.
+void RA_RenderImGui(void);
+
+// How the toolkit's modal windows block: runModalLoop must pump events and redraw until isOpen(data) returns 0.
+void RA_SetModalLoopHandler(void (*runModalLoop)(int (*isOpen)(void*), void* data));
+
 #endif

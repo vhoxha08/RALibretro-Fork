@@ -43,6 +43,52 @@ namespace
   std::function<void()> s_menuRenderer;
   std::function<void()> s_redraw;
   std::vector<Modal*> s_modals;
+  int s_externalModals = 0; // modal windows drawn by someone else (the toolkit), see runModalLoop
+  std::function<void()> s_toolkitRenderer;
+  std::function<void()> s_perFrame;
+
+  bool anyModalActive()
+  {
+    return !s_modals.empty() || s_externalModals > 0;
+  }
+
+  // Pumps events and redraws until isOpen returns false or the application is asked to quit.
+  // Returns false if quitting (the quit request is put back for the main loop).
+  bool modalLoop(const std::function<bool()>& isOpen, const std::function<bool(const SDL_Event&)>& onEvent,
+                 const std::function<bool()>& afterFrame)
+  {
+    while (isOpen())
+    {
+      SDL_Event event;
+      while (SDL_PollEvent(&event))
+      {
+        if (event.type == SDL_QUIT)
+        {
+          SDL_PushEvent(&event);
+          return false;
+        }
+
+        if (onEvent && onEvent(event))
+          continue;
+
+        gui::processEvent(event);
+      }
+
+      if (s_redraw)
+        s_redraw();
+
+      // work queued during the frame (i.e. by the toolkit's windows) runs outside of it
+      if (s_perFrame)
+        s_perFrame();
+
+      if (afterFrame && isOpen() && !afterFrame())
+        break;
+
+      SDL_Delay(16);
+    }
+
+    return true;
+  }
 }
 
 bool gui::init(SDL_Window* window, SDL_GLContext glContext)
@@ -103,13 +149,13 @@ bool gui::processEvent(const SDL_Event& event)
     case SDL_KEYDOWN:
     case SDL_KEYUP:
     case SDL_TEXTINPUT:
-      return io.WantCaptureKeyboard || !s_modals.empty();
+      return io.WantCaptureKeyboard || anyModalActive();
 
     case SDL_MOUSEMOTION:
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP:
     case SDL_MOUSEWHEEL:
-      return io.WantCaptureMouse || !s_modals.empty();
+      return io.WantCaptureMouse || anyModalActive();
 
     default:
       return false;
@@ -136,7 +182,32 @@ void gui::setMenuBarVisible(bool visible)
 
 bool gui::isModalActive()
 {
-  return !s_modals.empty();
+  return anyModalActive();
+}
+
+void gui::setToolkitRenderer(std::function<void()> renderer)
+{
+  s_toolkitRenderer = std::move(renderer);
+}
+
+void gui::setPerFrame(std::function<void()> perFrame)
+{
+  s_perFrame = std::move(perFrame);
+}
+
+bool gui::runModalLoop(const std::function<bool()>& isOpen)
+{
+  if (!s_initialized)
+    return true;
+
+  ++s_externalModals;
+  const bool result = modalLoop(isOpen, nullptr, nullptr);
+  --s_externalModals;
+
+  if (s_redraw)
+    s_redraw();
+
+  return result;
 }
 
 void gui::render()
@@ -150,7 +221,7 @@ void gui::render()
 
   if (s_menuBarVisible && s_menuRenderer)
   {
-    ImGui::BeginDisabled(!s_modals.empty());
+    ImGui::BeginDisabled(anyModalActive());
     if (ImGui::BeginMainMenuBar())
     {
       s_menuRenderer();
@@ -158,6 +229,10 @@ void gui::render()
     }
     ImGui::EndDisabled();
   }
+
+  // the toolkit's windows (login, message boxes, ...)
+  if (s_toolkitRenderer)
+    s_toolkitRenderer();
 
   // only the innermost modal is interactive; it is drawn last so it is on top
   for (size_t i = 0; i < s_modals.size(); ++i)
@@ -206,35 +281,7 @@ bool gui::runModal(const char* title, const std::function<bool()>& draw,
   Modal modal{title, &draw, true};
   s_modals.push_back(&modal);
 
-  bool quitting = false;
-  while (modal.open)
-  {
-    SDL_Event event;
-    while (SDL_PollEvent(&event))
-    {
-      if (event.type == SDL_QUIT)
-      {
-        // close the dialog and let the main loop see the quit request
-        quitting = true;
-        modal.open = false;
-        SDL_PushEvent(&event);
-        break;
-      }
-
-      if (onEvent && onEvent(event))
-        continue;
-
-      processEvent(event);
-    }
-
-    if (s_redraw)
-      s_redraw();
-
-    if (modal.open && afterFrame && !afterFrame())
-      modal.open = false;
-
-    SDL_Delay(16);
-  }
+  const bool notQuitting = modalLoop([&modal]() { return modal.open; }, onEvent, afterFrame);
 
   s_modals.pop_back();
 
@@ -242,7 +289,7 @@ bool gui::runModal(const char* title, const std::function<bool()>& draw,
   if (s_redraw)
     s_redraw();
 
-  return !quitting;
+  return notQuitting;
 }
 
 #endif

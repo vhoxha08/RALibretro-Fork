@@ -56,6 +56,14 @@ namespace gui
                 const std::function<bool(const SDL_Event&)>& onEvent = nullptr,
                 const std::function<bool()>& afterFrame = nullptr);
   bool isModalActive();
+
+  // Draws another component's windows (the toolkit's) every frame, after the menu bar.
+  void setToolkitRenderer(std::function<void()> renderer);
+  // Runs once per iteration of every modal loop, after the frame (i.e. the toolkit's UI thread work).
+  void setPerFrame(std::function<void()> perFrame);
+  // Blocks like runModal for a window drawn by the toolkit renderer, until isOpen returns false.
+  // Returns false if the application is quitting.
+  bool runModalLoop(const std::function<bool()>& isOpen);
 }
 
 #endif

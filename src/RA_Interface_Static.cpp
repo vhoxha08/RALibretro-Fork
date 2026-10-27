@@ -135,3 +135,14 @@ void RA_SetAudioHandlers(void (*playFile)(const char*), void (*beep)(void))
     if (g_bInitialized)
         _RA_SetAudioHandlers(playFile, beep);
 }
+
+void RA_RenderImGui(void)
+{
+    if (g_bInitialized)
+        _RA_RenderImGui();
+}
+
+void RA_SetModalLoopHandler(void (*runModalLoop)(int (*isOpen)(void*), void* data))
+{
+    _RA_SetModalLoopHandler(runModalLoop);
+}

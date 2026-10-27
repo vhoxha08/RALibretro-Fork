@@ -64,6 +64,13 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 HWND g_mainWindow;
 Application app;
 
+#ifndef _WIN32
+static void runToolkitModalLoop(int (*isOpen)(void*), void* data)
+{
+  gui::runModalLoop([isOpen, data]() { return isOpen(data) != 0; });
+}
+#endif
+
 #define CDROM_MENU_INDEX 10
 
 static void s_onRotationChanged(Video::Rotation oldRotation, Video::Rotation newRotation)
@@ -350,6 +357,12 @@ bool Application::init(const char* title, int width, int height)
 #ifndef _WIN32
     // keep RACache next to the other RALibretro folders, like the Windows build
     RA_SetBaseDirectory(_config.getRootFolder());
+
+    // the toolkit's windows are drawn with the GUI; its modal windows run in the GUI's modal loop. Set up before
+    // RA_Init, which may already show some.
+    RA_SetModalLoopHandler(runToolkitModalLoop);
+    gui::setToolkitRenderer([]() { RA_RenderImGui(); });
+    gui::setPerFrame([]() { RA_ProcessUIThreadActions(); });
 #endif
     RA_Init(g_mainWindow);
 #ifndef _WIN32

@@ -7,6 +7,27 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+find_package(SDL2 REQUIRED)
+find_package(OpenGL REQUIRED)
+
+# ---- Dear ImGui (menu bar and dialogs outside Windows) --------------------------------------------
+# defined before RAIntegration, which builds its ImGui UI backend against this target
+set(IMGUI_DIR src/imgui)
+add_library(imgui STATIC
+  ${IMGUI_DIR}/imgui.cpp
+  ${IMGUI_DIR}/imgui_draw.cpp
+  ${IMGUI_DIR}/imgui_tables.cpp
+  ${IMGUI_DIR}/imgui_widgets.cpp
+  ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(imgui PUBLIC ${IMGUI_DIR})
+target_link_libraries(imgui PUBLIC SDL2::SDL2)
+if(APPLE)
+  target_compile_definitions(imgui PRIVATE GL_SILENCE_DEPRECATION)
+endif()
+
 # ---- RAIntegration (linked statically instead of loading RA_Integration.dll) ---------------
 set(RA_INTEGRATION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../RAIntegration" CACHE PATH "RAIntegration checkout")
 if(NOT EXISTS "${RA_INTEGRATION_DIR}/CMakeLists.txt")
@@ -14,9 +35,6 @@ if(NOT EXISTS "${RA_INTEGRATION_DIR}/CMakeLists.txt")
 endif()
 set(RA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${RA_INTEGRATION_DIR}" RAIntegration EXCLUDE_FROM_ALL)
-
-find_package(SDL2 REQUIRED)
-find_package(OpenGL REQUIRED)
 
 # ---- generated version header ----------------------------------------------------------------
 set(RALIBRETRO_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -60,23 +78,6 @@ target_include_directories(chdr PUBLIC
   ${CHDR_DIR}/deps/miniz-3.1.2
 )
 target_compile_definitions(chdr PRIVATE Z7_ST ZSTD_DISABLE_ASM)
-
-# ---- Dear ImGui (menu bar and dialogs outside Windows) --------------------------------------------
-set(IMGUI_DIR src/imgui)
-add_library(imgui STATIC
-  ${IMGUI_DIR}/imgui.cpp
-  ${IMGUI_DIR}/imgui_draw.cpp
-  ${IMGUI_DIR}/imgui_tables.cpp
-  ${IMGUI_DIR}/imgui_widgets.cpp
-  ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
-  ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
-  ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
-)
-target_include_directories(imgui PUBLIC ${IMGUI_DIR})
-target_link_libraries(imgui PUBLIC SDL2::SDL2)
-if(APPLE)
-  target_compile_definitions(imgui PRIVATE GL_SILENCE_DEPRECATION)
-endif()
 
 # ---- nativefiledialog-extended (open/save dialogs outside Windows) ----------------------------------
 set(NFD_INSTALL OFF CACHE BOOL "" FORCE)
@@ -133,7 +134,7 @@ target_include_directories(RALibretro BEFORE PRIVATE
 )
 target_compile_definitions(RALibretro PRIVATE
   OUTSIDE_SPEEX RANDOM_PREFIX=speex EXPORT= FIXED_POINT HAVE_CHD LOG_TO_FILE)
-target_link_libraries(RALibretro PRIVATE RAIntegrationHeadless chdr imgui nfd SDL2::SDL2 OpenGL::GL ${CMAKE_DL_LIBS})
+target_link_libraries(RALibretro PRIVATE RAIntegrationImGui chdr imgui nfd SDL2::SDL2 OpenGL::GL ${CMAKE_DL_LIBS})
 
 if(APPLE)
   # OpenGL is deprecated (but available) on macOS
