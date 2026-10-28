@@ -54,9 +54,10 @@ public:
   virtual void showMessage(const char* msg, unsigned frames) override;
   bool hasMessage() const { return _numMessages != 0; }
 
-  // The toolkit's overlay, drawn over the game: premultiplied ARGB pixels (rows from top to bottom) the size of the
-  // window, or none (nullptr). Can be called from any thread; it's drawn with the next frame.
-  void setOverlayImage(const uint32_t* argb, unsigned width, unsigned height);
+  // The toolkit's overlay, drawn over the game: premultiplied ARGB pixels (rows from top to bottom) for the part of the
+  // window at (x, y) from its top left corner, or none (nullptr). Can be called from any thread; it's drawn with the
+  // next frame.
+  void setOverlayImage(const uint32_t* argb, int x, int y, unsigned width, unsigned height);
   bool hasOverlayChanged() const { return _overlayChanged; }
 
   virtual void showSpeedIndicator(Speed visibleIndicator) override;
@@ -125,11 +126,15 @@ protected:
   void drawOverlay();
   std::mutex              _overlayMutex;
   std::vector<uint32_t>   _overlayPixels;
+  int                     _overlayX = 0;
+  int                     _overlayY = 0;
   unsigned                _overlayWidth = 0;
   unsigned                _overlayHeight = 0;
   std::atomic<bool>       _overlayChanged{false};
   GLuint                  _overlayTexture = 0;
   GLuint                  _overlayVertexArray = 0;
+  GLint                   _overlayDrawX = 0;
+  GLint                   _overlayDrawY = 0;
   unsigned                _overlayTextureWidth = 0;
   unsigned                _overlayTextureHeight = 0;
   unsigned                _windowHeight;

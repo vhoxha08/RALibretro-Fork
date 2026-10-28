@@ -37,9 +37,10 @@ void RA_SetClipboardHandlers(void (*setText)(const char* utf8Text), const char* 
 // Sound playback. playFile receives the absolute path of a .wav file.
 void RA_SetAudioHandlers(void (*playFile)(const char* utf8Path), void (*beep)(void));
 
-// Receives the toolkit's overlay to draw over the game: premultiplied ARGB pixels (rows from top to bottom) the size of
-// the game area at the display's resolution, or NULL when there's nothing to show. Called on the UI thread.
-void RA_SetOverlayImageHandler(void (*handleImage)(const uint32_t* argb, int width, int height));
+// Receives the toolkit's overlay to draw over the game: the part of the game area with something in it, at (x, y) from
+// its top left corner, as premultiplied ARGB pixels (rows from top to bottom), in pixels of the display; NULL when
+// there's nothing to show. Called on the UI thread.
+void RA_SetOverlayImageHandler(void (*handleImage)(const uint32_t* argb, int x, int y, int width, int height));
 
 // The platform's file dialog. mode: 1 = open, 2 = save, 3 = select folder. filters is a list of "Description\tspec\n"
 // entries (spec = "ext1,ext2"). Writes the chosen UTF-8 path to result and returns non-zero, or 0 if canceled.

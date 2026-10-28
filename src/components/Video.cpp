@@ -315,7 +315,7 @@ void Video::draw(bool force)
   }
 }
 
-void Video::setOverlayImage(const uint32_t* argb, unsigned width, unsigned height)
+void Video::setOverlayImage(const uint32_t* argb, int x, int y, unsigned width, unsigned height)
 {
   std::lock_guard<std::mutex> lock(_overlayMutex);
   if (argb == nullptr || width == 0 || height == 0)
@@ -326,6 +326,8 @@ void Video::setOverlayImage(const uint32_t* argb, unsigned width, unsigned heigh
   else
   {
     _overlayPixels.assign(argb, argb + (size_t)width * height);
+    _overlayX = x;
+    _overlayY = y;
     _overlayWidth = width;
     _overlayHeight = height;
   }
@@ -359,6 +361,9 @@ void Video::drawOverlay()
         _overlayTextureHeight = _overlayHeight;
       }
 
+      _overlayDrawX = _overlayX;
+      _overlayDrawY = _overlayY;
+
       if (_overlayTexture != 0)
       {
         Gl::bindTexture(GL_TEXTURE_2D, _overlayTexture);
@@ -385,7 +390,9 @@ void Video::drawOverlay()
     Gl::bindBuffer(GL_ARRAY_BUFFER, 0);
   }
 
-  Gl::viewport(0, 0, _windowWidth, _windowHeight);
+  // the quad covers the overlay's part of the window (GL counts from the bottom)
+  Gl::viewport(_overlayDrawX, (GLint)_windowHeight - _overlayDrawY - (GLint)_overlayTextureHeight,
+               _overlayTextureWidth, _overlayTextureHeight);
   Gl::useProgram(_program);
   Gl::bindVertexArray(_overlayVertexArray);
   Gl::activeTexture(GL_TEXTURE0);

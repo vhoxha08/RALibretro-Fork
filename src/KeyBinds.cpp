@@ -1770,7 +1770,8 @@ protected:
         if (event.key.keysym.mod & KMOD_SHIFT)
           _buttonDescriptor.modifiers |= KMOD_SHIFT;
 
-        updateBindingString();
+        if (updateBindingString())
+          accept();
         break;
     }
 
@@ -1793,7 +1794,8 @@ protected:
       if (pair != _bindingMap->end())
         _buttonDescriptor.joystick_id = pair->second;
 
-      updateBindingString();
+      if (updateBindingString())
+        accept();
     }
   }
 
@@ -1811,7 +1813,15 @@ protected:
     return true;
   }
 
-  void updateBindingString()
+  // a binding nothing else uses is taken right away; a duplicate stays for the user to keep (OK) or not
+  void accept()
+  {
+    retrieveData();
+    close(IDOK);
+  }
+
+  // returns false if another action has the same binding (the label says so)
+  bool updateBindingString()
   {
     char buffer[32];
     KeyBinds::getBindingString(buffer, _buttonDescriptor);
@@ -1833,13 +1843,14 @@ protected:
             std::string sMessage = buffer;
             sMessage.append("\nWARNING: Multiple bindings");
             setControlText(ID_LABEL, sMessage);
-            return;
+            return false;
           }
         }
       }
     }
 
     setControlText(ID_LABEL, buffer);
+    return true;
   }
 };
 

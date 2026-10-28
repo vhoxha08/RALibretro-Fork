@@ -136,7 +136,7 @@ void RA_SetAudioHandlers(void (*playFile)(const char*), void (*beep)(void))
         _RA_SetAudioHandlers(playFile, beep);
 }
 
-void RA_SetOverlayImageHandler(void (*handleImage)(const uint32_t*, int, int))
+void RA_SetOverlayImageHandler(void (*handleImage)(const uint32_t*, int, int, int, int))
 {
     _RA_SetOverlayImageHandler(handleImage);
 }

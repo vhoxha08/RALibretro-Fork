@@ -458,6 +458,7 @@ private:
     }
 
     sync();
+    Update(); // show what the hook changed right away (i.e. the key just bound), not on the next redraw
   }
 
   void click(DWORD id)
