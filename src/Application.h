@@ -232,20 +232,15 @@ protected:
 
   // ===== threads (see runThreaded) =====
 
-  struct GameQuery;
-
   bool isGameThread() const { return std::this_thread::get_id() == _gameThreadId; }
-  // Runs fn on the game thread and waits for it, but at most timeout. Returns false if fn didn't run (it never
-  // will). Served before postToGameThread's work.
-  bool queryGameThread(const std::function<void()>& fn, std::chrono::milliseconds timeout);
-  void runGameQueries();
 
   std::thread::id _gameThreadId = std::this_thread::get_id();
   std::mutex _gameThreadMutex;
   std::deque<std::function<void()>> _gameTasks;
-  std::deque<std::shared_ptr<GameQuery>> _gameQueries;
 
-  // a menu as built on the game thread, for the main thread to show
+  // The menus, as built on the game thread (which owns the state they show) for the main thread to show without
+  // waiting for it: macOS asks for them before handling keys (looking for shortcuts), even while the game thread
+  // waits for a dialog. Published after each command and a few times per second.
   struct MenuEntry
   {
     enum class Kind { Begin, End, Item, Separator } kind;
@@ -254,7 +249,11 @@ protected:
     bool enabled;
     bool checked;
   };
-  std::map<host::Menu, std::vector<MenuEntry>> _menuCache; // main thread: the last menus the game thread built
+  void publishMenus();
+  std::mutex _menusMutex;
+  std::map<host::Menu, std::vector<MenuEntry>> _menus;
+  std::chrono::steady_clock::time_point _menusPublished;
+  bool _menusChanged = true;
 #endif
 
   int _absViewMouseX;

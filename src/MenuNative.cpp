@@ -113,21 +113,41 @@ namespace
   };
 }
 
+void Application::publishMenus()
+{
+  // game thread: after a command (it may change what the menus show), otherwise a few times per second (i.e. the
+  // toolkit's items change when logging in)
+  const auto now = std::chrono::steady_clock::now();
+  if (!_menusChanged && now - _menusPublished < std::chrono::milliseconds(250))
+    return;
+
+  std::map<host::Menu, std::vector<MenuEntry>> menus;
+  for (const auto menu : {host::Menu::File, host::Menu::Settings, host::Menu::RetroAchievements, host::Menu::Help})
+  {
+    RecordingSink<MenuEntry> recorder(menus[menu]);
+    buildMenuItems(menu, recorder);
+  }
+
+  std::lock_guard<std::mutex> lock(_menusMutex);
+  _menus = std::move(menus);
+  _menusPublished = now;
+  _menusChanged = false;
+}
+
 void Application::buildMenu(host::Menu menu, host::MenuSink& sink)
 {
-  // main thread: the game thread knows the state. It answers within a frame, unless it is busy (i.e. loading a
-  // game) or waiting for the main thread itself (a message box); then show the menu as it was last time.
   std::vector<MenuEntry> entries;
-  if (queryGameThread([this, menu, &entries]() {
-        RecordingSink<MenuEntry> recorder(entries);
-        buildMenuItems(menu, recorder);
-      }, std::chrono::milliseconds(250)))
+  if (isGameThread())
   {
-    _menuCache[menu] = entries;
+    // (before the game thread starts, the main thread is the game thread)
+    RecordingSink<MenuEntry> recorder(entries);
+    buildMenuItems(menu, recorder);
   }
   else
   {
-    entries = _menuCache[menu];
+    // the menus the game thread published last, without waiting for it
+    std::lock_guard<std::mutex> lock(_menusMutex);
+    entries = _menus[menu];
   }
 
   for (const auto& entry : entries)
@@ -234,8 +254,6 @@ void Application::addDiscMenu(host::MenuSink& sink)
 
 void Application::runPendingCommand()
 {
-  runGameQueries();
-
   // one at a time: a command may quit
   for (;;)
   {
@@ -243,14 +261,17 @@ void Application::runPendingCommand()
     {
       std::lock_guard<std::mutex> lock(_gameThreadMutex);
       if (_gameTasks.empty())
-        return;
+        break;
 
       task = std::move(_gameTasks.front());
       _gameTasks.pop_front();
     }
 
     task();
+    _menusChanged = true;
   }
+
+  publishMenus();
 }
 
 void Application::buildMenuItems(host::Menu menu, host::MenuSink& sink)

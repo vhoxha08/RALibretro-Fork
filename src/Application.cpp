@@ -587,16 +587,6 @@ void Application::runTurbo()
 }
 
 #ifndef _WIN32
-struct Application::GameQuery
-{
-  const std::function<void()>* fn;
-  std::mutex mutex;
-  std::condition_variable condition;
-  bool started = false;
-  bool cancelled = false;
-  bool done = false;
-};
-
 void Application::postToGameThread(std::function<void()> fn)
 {
   if (isGameThread())
@@ -607,63 +597,6 @@ void Application::postToGameThread(std::function<void()> fn)
 
   std::lock_guard<std::mutex> lock(_gameThreadMutex);
   _gameTasks.push_back(std::move(fn));
-}
-
-bool Application::queryGameThread(const std::function<void()>& fn, std::chrono::milliseconds timeout)
-{
-  if (isGameThread())
-  {
-    fn();
-    return true;
-  }
-
-  auto query = std::make_shared<GameQuery>();
-  query->fn = &fn;
-  {
-    std::lock_guard<std::mutex> lock(_gameThreadMutex);
-    _gameQueries.push_back(query);
-  }
-
-  std::unique_lock<std::mutex> lock(query->mutex);
-  if (!query->condition.wait_for(lock, timeout, [&query]() { return query->started; }))
-  {
-    // fn refers to the caller's state: it mustn't run once we're gone
-    query->cancelled = true;
-    return false;
-  }
-
-  query->condition.wait(lock, [&query]() { return query->done; });
-  return true;
-}
-
-void Application::runGameQueries()
-{
-  for (;;)
-  {
-    std::shared_ptr<GameQuery> query;
-    {
-      std::lock_guard<std::mutex> lock(_gameThreadMutex);
-      if (_gameQueries.empty())
-        return;
-
-      query = std::move(_gameQueries.front());
-      _gameQueries.pop_front();
-    }
-
-    {
-      std::lock_guard<std::mutex> lock(query->mutex);
-      if (query->cancelled)
-        continue;
-      query->started = true;
-      query->condition.notify_all();
-    }
-
-    (*query->fn)();
-
-    std::lock_guard<std::mutex> lock(query->mutex);
-    query->done = true;
-    query->condition.notify_all();
-  }
 }
 
 bool Application::runThreaded(int argc, char* argv[])
