@@ -18,6 +18,10 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "Application.h"
+
+#ifdef __APPLE__
+#include "MacEventTracking.h"
+#endif
 #include "RA_BuildVer.h"
 
 #include <SDL_syswm.h>
@@ -368,6 +372,9 @@ bool Application::init(const char* title, int width, int height)
 #ifndef _WIN32
     installHostServices();
 #endif
+#ifdef __APPLE__
+    startEventTrackingTimer([this]() { stepDuringEventTracking(); });
+#endif
   }
 
   if (!_memory.init(&_logger))
@@ -549,6 +556,43 @@ void Application::runTurbo()
   {
     SDL_Delay((Uint32)((std::chrono::milliseconds(15) - tTurboElapsed).count()));
   }
+}
+
+void Application::stepDuringEventTracking()
+{
+  // macOS is running its own event loop (a window being resized, an open menu) inside processEvents(); keep the
+  // game running meanwhile. Events are left to macOS until it returns.
+  if (_inEventTrackingStep || !_processingEvents || _fsm.currentState() != Fsm::State::GameRunning ||
+      _config.getFastForwarding())
+  {
+    return;
+  }
+
+  // macOS only fires the timer a few times per second while tracking; run the frames that are due since the
+  // last one (the audio buffer still paces them)
+  const double fps = (_core.getSystemAVInfo() && _core.getSystemAVInfo()->timing.fps > 0) ?
+    _core.getSystemAVInfo()->timing.fps : 60.0;
+  const auto frameTime = std::chrono::duration<double>(1.0 / fps);
+  const auto now = std::chrono::steady_clock::now();
+  if (now - _lastEventTrackingFrame > std::chrono::milliseconds(250))
+    _lastEventTrackingFrame = now - std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
+
+  // catching up shouldn't wait for vsync on every frame (the audio buffer paces them)
+  const int swapInterval = SDL_GL_GetSwapInterval();
+  if (swapInterval != 0)
+    SDL_GL_SetSwapInterval(0);
+
+  _inEventTrackingStep = true;
+  for (int i = 0; i < 5 && std::chrono::steady_clock::now() - _lastEventTrackingFrame >= frameTime; i++)
+  {
+    _core.step(true, true);
+    RA_DoAchievementsFrame();
+    _lastEventTrackingFrame += std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
+  }
+  _inEventTrackingStep = false;
+
+  if (swapInterval != 0)
+    SDL_GL_SetSwapInterval(swapInterval);
 }
 
 void Application::runSmoothed()

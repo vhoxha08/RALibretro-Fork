@@ -19,6 +19,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,7 @@ protected:
   // Helpers
   void        processEvents();
   void        runSmoothed();
+  void        stepDuringEventTracking();
   void        runTurbo();
   void        pauseForBadPerformance();
 
@@ -174,6 +176,8 @@ protected:
   int          _audioGeneratedDuringFastForward;
   bool         _vsyncDisabledByAudioFaults;
   bool         _processingEvents;
+  bool         _inEventTrackingStep = false;
+  std::chrono::steady_clock::time_point _lastEventTrackingFrame;
 
   KeyBinds _keybinds;
   std::vector<RecentItem> _recentList;

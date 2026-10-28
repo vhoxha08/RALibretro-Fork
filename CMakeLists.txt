@@ -144,6 +144,9 @@ target_link_libraries(RALibretro PRIVATE RAIntegrationWx chdr imgui nfd SDL2::SD
 if(APPLE)
   # OpenGL is deprecated (but available) on macOS
   target_compile_definitions(RALibretro PRIVATE GL_SILENCE_DEPRECATION)
+  # keeps the game running while macOS tracks a window resize or an open menu
+  target_sources(RALibretro PRIVATE src/MacEventTracking.mm)
+  target_link_libraries(RALibretro PRIVATE "-framework AppKit")
 endif()
 
 # Make the build folder a "portable" install: RALibretro uses the executable's folder as its root
