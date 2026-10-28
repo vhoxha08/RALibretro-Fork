@@ -162,9 +162,9 @@ if(APPLE)
 
   set(RALIBRETRO_ICNS ${CMAKE_CURRENT_BINARY_DIR}/RALibretro.icns)
   add_custom_command(OUTPUT ${RALIBRETRO_ICNS}
-    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/make-icns.sh ${CMAKE_CURRENT_SOURCE_DIR}/src/retroarch.ico
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/make-icns.sh ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/icon.png
             ${RALIBRETRO_ICNS}
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/retroarch.ico ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/make-icns.sh
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/icon.png ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/make-icns.sh
   )
   target_sources(RALibretro PRIVATE ${RALIBRETRO_ICNS})
   set_source_files_properties(${RALIBRETRO_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
