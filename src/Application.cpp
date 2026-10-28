@@ -590,15 +590,20 @@ void Application::stepDuringEventTracking()
   // middle of processEvents(), but running frames, so let it play them
   _processingEvents = false;
 
+  // don't wait for room in the audio buffer: the frames are already paced by the clock, and every millisecond
+  // spent here delays the resize/menu the user is interacting with
+  _audio.setBlocking(false);
+
   const int maxFrames = std::max(1, (int)(fps / 4));
   for (int i = 0; i < maxFrames && std::chrono::steady_clock::now() - _lastEventTrackingFrame >= frameTime &&
-                  std::chrono::steady_clock::now() - now < std::chrono::milliseconds(100); i++)
+                  std::chrono::steady_clock::now() - now < std::chrono::milliseconds(20); i++)
   {
     _core.step(true, true);
     RA_DoAchievementsFrame();
     _lastEventTrackingFrame += std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
     _eventTrackingFrames++;
   }
+  _audio.setBlocking(true);
   _processingEvents = true;
   _inEventTrackingStep = false;
   _eventTrackingStepTime += std::chrono::steady_clock::now() - now;
