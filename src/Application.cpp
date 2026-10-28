@@ -357,6 +357,7 @@ bool Application::init(const char* title, int width, int height)
 
   gui::setRedraw([this]() { _video.redraw(); });
   gui::setNativeEventPump(host::pumpEvents);
+  host::setTextInputHandler(gui::addTextInput);
   _video.setOverlayRenderer(gui::render);
 
   // the Win32 build learns the initial size from the resize caused by attaching its menu; there is no such

@@ -297,6 +297,12 @@ bool gui::processEvent(const SDL_Event& event)
   }
 }
 
+void gui::addTextInput(const char* utf8)
+{
+  if (s_initialized)
+    ImGui::GetIO().AddInputCharactersUTF8(utf8);
+}
+
 bool gui::isModalActive()
 {
   return anyModalActive();

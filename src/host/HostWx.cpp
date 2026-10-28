@@ -57,6 +57,8 @@ namespace hostmac
 
 namespace
 {
+  std::function<void(const char*)> s_textInputHandler;
+
   class HostApp : public wxApp
   {
   public:
@@ -202,12 +204,8 @@ namespace
         const wxChar c = event.GetUnicodeKey();
         if (c >= 32 && c != 127 && !event.RawControlDown() && !event.CmdDown())
         {
-          SDL_Event sdlEvent = {};
-          sdlEvent.type = SDL_TEXTINPUT;
-          sdlEvent.text.timestamp = SDL_GetTicks();
-          const wxScopedCharBuffer utf8 = wxString(c).utf8_str();
-          strncpy(sdlEvent.text.text, utf8.data(), sizeof(sdlEvent.text.text) - 1);
-          SDL_PushEvent(&sdlEvent);
+          if (s_textInputHandler)
+            s_textInputHandler(wxString(c).utf8_str().data());
         }
       });
 
@@ -500,6 +498,11 @@ void host::shutdown()
     wxTheApp->OnExit();
     wxEntryCleanup();
   }
+}
+
+void host::setTextInputHandler(std::function<void(const char*)> handler)
+{
+  s_textInputHandler = std::move(handler);
 }
 
 void host::pumpEvents()

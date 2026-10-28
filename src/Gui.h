@@ -41,6 +41,9 @@ namespace gui
   // Returns true if ImGui uses the event (i.e. typing into a field or clicking a menu), so the game ignores it.
   bool processEvent(const SDL_Event& event);
 
+  // Text typed into the window (UTF-8).
+  void addTextInput(const char* utf8);
+
   // Builds and renders one GUI frame. Called with the frontend GL context current, before the swap.
   void render();
 

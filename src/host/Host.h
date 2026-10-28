@@ -26,6 +26,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 // event queue, so the application keeps handling input as SDL events.
 #ifndef _WIN32
 
+#include <functional>
 #include <string>
 
 namespace host
@@ -33,6 +34,10 @@ namespace host
   // Lifecycle; init must run before anything else uses the native user interface (i.e. RA_Init).
   bool init(int argc, char* argv[]);
   void shutdown();
+
+  // Receives typed text (UTF-8). It doesn't go through SDL's queue: SDL3's SDL2 compatibility layer crashes
+  // pushing text input events.
+  void setTextInputHandler(std::function<void(const char*)> handler);
 
   // Handles the native events that are waiting (menus, window changes, the toolkit's windows). Window input is
   // pushed on SDL's queue for the caller to poll afterwards.
