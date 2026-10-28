@@ -23,19 +23,46 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <SDL.h>
 
+#include <atomic>
+
+// The OpenGL contexts of the game view: one for the frontend (and the toolkit's overlay) and one for the core
+// (hardware rendered cores draw into it), sharing objects. The Windows build creates them on its SDL window; the
+// macOS/Linux build on the native window's GL view (see host/Host.h).
 class VideoContext : public libretro::VideoContextComponent
 {
 public:
+#ifdef _WIN32
   bool init(libretro::LoggerComponent* logger, SDL_Window* window);
+#else
+  bool init(libretro::LoggerComponent* logger);
+#endif
   void destroy();
 
   virtual void enableCoreContext(bool enable) override;
   virtual void resetCoreContext() override;
   virtual void swapBuffers() override;
 
+  // vsync (0 = off, 1 = on) of the game view
+  static void setSwapInterval(int interval);
+  static int getSwapInterval();
+
+  // OpenGL entry points for the frontend and hardware rendered cores
+  static void* getProcAddress(const char* symbol);
+
 private:
   libretro::LoggerComponent* _logger;
+#ifdef _WIN32
   SDL_Window* _window;
   SDL_GLContext _raContext;
   SDL_GLContext _coreContext;
+#else
+  void* _raContext = nullptr;
+  void* _coreContext = nullptr;
+  bool _coreCurrent = false;
+#endif
+
+  static VideoContext* s_instance;
+#ifndef _WIN32
+  static std::atomic<int> s_swapInterval; // readable from any thread (i.e. the audio callback)
+#endif
 };

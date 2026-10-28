@@ -1,4 +1,6 @@
 #include "Gl.h"
+
+#include "components/VideoContext.h"
 #include "Platform.h"
 
 #include <SDL_video.h>
@@ -62,7 +64,7 @@ static PFNGLBINDSAMPLERPROC s_glBindSampler;
 
 static void* getProcAddress(const char* symbol)
 {
-  void* address = SDL_GL_GetProcAddress(symbol);
+  void* address = VideoContext::getProcAddress(symbol);
 
   if (address == NULL)
   {

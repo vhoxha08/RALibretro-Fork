@@ -19,8 +19,8 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
-// Dear ImGui user interface for the macOS/Linux build: the menu bar (in place of the Win32 menu) and
-// modal dialogs. Drawn on top of the game image right before each buffer swap.
+// Dear ImGui user interface for the macOS/Linux build: modal dialogs (the menu bar is native, see host/Host.h).
+// Drawn on top of the game image right before each buffer swap.
 #ifndef _WIN32
 
 #include <SDL.h>
@@ -29,12 +29,12 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace gui
 {
-  // glContext is the frontend's (not the core's) OpenGL context; it must be current.
-  bool init(SDL_Window* window, SDL_GLContext glContext);
+  // The frontend's (not the core's) OpenGL context must be current. getSize returns the size of the game view.
+  bool init(std::function<void(int*, int*)> getSize);
   void destroy();
 
-  // Draws the menu bar contents (between BeginMainMenuBar/EndMainMenuBar).
-  void setMenuRenderer(std::function<void()> renderer);
+  // Handles the native window's events; called by the modal loops before polling SDL's queue.
+  void setNativeEventPump(std::function<void()> pump);
   // Redraws the window (game image + GUI). Used while a modal dialog runs its own loop.
   void setRedraw(std::function<void()> redraw);
 
@@ -43,10 +43,6 @@ namespace gui
 
   // Builds and renders one GUI frame. Called with the frontend GL context current, before the swap.
   void render();
-
-  // Height of the menu bar in window coordinates (0 when hidden, i.e. in fullscreen).
-  int  menuBarHeight();
-  void setMenuBarVisible(bool visible);
 
   // Runs a modal window until draw returns false. draw is called between Begin/End of the window; onEvent
   // sees every SDL event first and returns true to consume it. Returns false if the application is quitting.
@@ -57,7 +53,7 @@ namespace gui
                 const std::function<bool()>& afterFrame = nullptr);
   bool isModalActive();
 
-  // Draws another component's windows (the toolkit's) every frame, after the menu bar.
+  // Draws another component's windows (the toolkit's) every frame.
   void setToolkitRenderer(std::function<void()> renderer);
   // Runs once per iteration of every modal loop, after the frame (i.e. the toolkit's UI thread work).
   void setPerFrame(std::function<void()> perFrame);

@@ -25,6 +25,10 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include "Application.h"
 #include "Util.h"
 
+#ifndef _WIN32
+#include "host/Host.h"
+#endif
+
 #include <signal.h>
 
 extern Application app;
@@ -80,6 +84,12 @@ int main(int argc, char* argv[])
 {
   signal(SIGABRT, &abort_handler);
 
+#ifndef _WIN32
+  // the native user interface (host/Host.h) must exist before the application creates its window
+  if (!host::init(argc, argv))
+    return 1;
+#endif
+
   bool ok = app.init("RALibRetro", 640, 480);
   ok &= app.handleArgs(argc, argv);
 
@@ -100,6 +110,10 @@ int main(int argc, char* argv[])
 
     app.destroy();
   }
+
+#ifndef _WIN32
+  host::shutdown();
+#endif
 
   return ok ? 0 : 1;
 }

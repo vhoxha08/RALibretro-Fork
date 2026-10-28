@@ -110,6 +110,7 @@ add_executable(RALibretro
   src/Gl.cpp
   src/GlUtil.cpp
   src/Hash.cpp
+  src/host/HostWx.cpp
   src/Hash3DS.cpp
   src/HashCHD.cpp
   src/jsonsax/jsonsax.c
@@ -119,7 +120,7 @@ add_executable(RALibretro
   src/libretro/Core.cpp
   src/main.cpp
   src/Memory.cpp
-  src/MenuImGui.cpp
+  src/MenuNative.cpp
   src/Platform.cpp
   src/RA_Implementation.cpp
   src/RA_Interface_Static.cpp
@@ -139,13 +140,14 @@ target_include_directories(RALibretro BEFORE PRIVATE
 )
 target_compile_definitions(RALibretro PRIVATE
   OUTSIDE_SPEEX RANDOM_PREFIX=speex EXPORT= FIXED_POINT HAVE_CHD LOG_TO_FILE)
-target_link_libraries(RALibretro PRIVATE RAIntegrationWx chdr imgui nfd SDL2::SDL2 OpenGL::GL ${CMAKE_DL_LIBS})
+target_link_libraries(RALibretro PRIVATE RAIntegrationWx wx::gl wx::core wx::base chdr imgui nfd SDL2::SDL2 OpenGL::GL
+  ${CMAKE_DL_LIBS})
 
 if(APPLE)
   # OpenGL is deprecated (but available) on macOS
   target_compile_definitions(RALibretro PRIVATE GL_SILENCE_DEPRECATION)
   # keeps the game running while macOS tracks a window resize or an open menu
-  target_sources(RALibretro PRIVATE src/MacEventTracking.mm)
+  target_sources(RALibretro PRIVATE src/MacEventTracking.mm src/host/HostMac.mm)
   target_link_libraries(RALibretro PRIVATE "-framework AppKit")
 endif()
 

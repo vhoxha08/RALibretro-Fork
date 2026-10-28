@@ -1,0 +1,70 @@
+/*
+Copyright (C) 2018 Andre Leiradella
+
+This file is part of RALibretro.
+
+RALibretro is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+RALibretro is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+// macOS specifics of the native user interface (see Host.h)
+
+#import <AppKit/AppKit.h>
+#import <OpenGL/OpenGL.h>
+
+#include <dlfcn.h>
+
+namespace hostmac
+{
+  void prepareGLView(void* nsView)
+  {
+    // the frontend works in window points (like the SDL window it replaces): draw at 1x
+    NSView* view = (__bridge NSView*)nsView;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    [view setWantsBestResolutionOpenGLSurface:NO];
+#pragma clang diagnostic pop
+  }
+
+  void activateApplication()
+  {
+    // started from a terminal (not an application bundle) the process isn't a regular application yet
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    [NSApp activateIgnoringOtherApps:YES];
+  }
+
+  void setSwapInterval(int interval)
+  {
+    CGLContextObj context = CGLGetCurrentContext();
+    if (context)
+    {
+      GLint value = interval;
+      CGLSetParameter(context, kCGLCPSwapInterval, &value);
+    }
+  }
+
+  int getSwapInterval()
+  {
+    CGLContextObj context = CGLGetCurrentContext();
+    GLint value = 0;
+    if (context)
+      CGLGetParameter(context, kCGLCPSwapInterval, &value);
+    return value;
+  }
+
+  void* getGLProcAddress(const char* name)
+  {
+    static void* s_library = dlopen("/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL", RTLD_LAZY);
+    return s_library ? dlsym(s_library, name) : nullptr;
+  }
+}

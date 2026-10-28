@@ -24,6 +24,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <SDL.h>
 #include <SDL_opengl.h>
 
+#include "host/Host.h"
 #include "stb_image.h"
 
 #include <nfd.h>
@@ -32,46 +33,9 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <string>
 #include <vector>
 
-int MessageBox(HWND hWnd, const char* text, const char* caption, unsigned int type)
+int MessageBox(HWND, const char* text, const char* caption, unsigned int type)
 {
-  SDL_MessageBoxData data = {};
-  data.window = static_cast<SDL_Window*>(hWnd);
-  data.title = caption;
-  data.message = text;
-
-  if ((type & MB_ICONWARNING) == MB_ICONWARNING)
-    data.flags = SDL_MESSAGEBOX_WARNING;
-  else if (type & MB_ICONERROR)
-    data.flags = SDL_MESSAGEBOX_ERROR;
-  else
-    data.flags = SDL_MESSAGEBOX_INFORMATION;
-
-  // SDL lists buttons in the order given; mark the defaults for Return and Escape
-  SDL_MessageBoxButtonData buttons[2] = {};
-  if (type & MB_YESNO)
-  {
-    buttons[0] = {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, IDNO, "No"};
-    buttons[1] = {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, IDYES, "Yes"};
-    data.numbuttons = 2;
-  }
-  else if (type & MB_OKCANCEL)
-  {
-    buttons[0] = {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, IDCANCEL, "Cancel"};
-    buttons[1] = {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, IDOK, "OK"};
-    data.numbuttons = 2;
-  }
-  else
-  {
-    buttons[0] = {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, IDOK, "OK"};
-    data.numbuttons = 1;
-  }
-  data.buttons = buttons;
-
-  int buttonId = 0;
-  if (SDL_ShowMessageBox(&data, &buttonId) != 0 || buttonId < 0)
-    return (type & MB_YESNO) ? IDNO : IDCANCEL;
-
-  return buttonId;
+  return host::messageBox(text, caption, type);
 }
 
 // ---- host services for the statically linked toolkit ----
@@ -83,15 +47,13 @@ int MessageBox(HWND hWnd, const char* text, const char* caption, unsigned int ty
 
 static void setClipboardText(const char* utf8Text)
 {
-  SDL_SetClipboardText(utf8Text);
+  host::setClipboardText(utf8Text);
 }
 
 static const char* getClipboardText()
 {
   static std::string text; // must stay valid until the next call
-  char* clipboard = SDL_GetClipboardText();
-  text = clipboard ? clipboard : "";
-  SDL_free(clipboard);
+  text = host::getClipboardText();
   return text.c_str();
 }
 

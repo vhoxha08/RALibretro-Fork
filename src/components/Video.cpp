@@ -19,6 +19,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Video.h"
 #include "Gl.h"
+#include "VideoContext.h"
 #include "GlUtil.h"
 
 #include "BitmapFont.h"
@@ -412,7 +413,7 @@ uintptr_t Video::getCurrentFramebuffer()
 
 retro_proc_address_t Video::getProcAddress(const char* symbol)
 {
-  void* address = SDL_GL_GetProcAddress(symbol);
+  void* address = VideoContext::getProcAddress(symbol);
   _logger->debug(TAG "OpenGL symbol: %p resolved for %s", address, symbol);
   return (retro_proc_address_t)address;
 }

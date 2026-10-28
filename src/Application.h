@@ -44,7 +44,14 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include "Memory.h"
 #include "States.h"
 
+#ifndef _WIN32
+#include "host/Host.h"
+#endif
+
 class Application
+#ifndef _WIN32
+  : public host::MenuProvider
+#endif
 {
 public:
   Application();
@@ -75,6 +82,7 @@ public:
   const std::string& gameName() const { return _gameFileName; }
   bool validateHardcoreEnablement();
 
+  bool isFullscreen() const;
   void onRotationChanged(Video::Rotation oldRotation, Video::Rotation newRotation);
 
   void refreshMemoryMap();
@@ -126,11 +134,19 @@ protected:
   void        handleCommand(unsigned cmd);
   bool        isMenuCommandEnabled(unsigned id);
 #ifndef _WIN32
-  void        drawMenuBar();
-  void        drawSystemsMenu();
-  void        drawDiscMenu();
-  void        menuItem(const char* label, unsigned id, bool enabled = true, bool checked = false);
+  // host::MenuProvider: the native menu bar (MenuNative.cpp)
+  void        buildMenu(host::Menu menu, host::MenuSink& sink) override;
+  void        onMenuCommand(unsigned id) override;
+  void        addSystemsMenu(host::MenuSink& sink);
+  void        addDiscMenu(host::MenuSink& sink);
+  void        menuItem(host::MenuSink& sink, const std::string& label, unsigned id, bool enabled = true,
+                       bool checked = false);
   void        runPendingCommand();
+
+  // work the audio callback asks the main loop to do (GL and the user interface belong to the main thread)
+  void        applyAudioRequests();
+  std::atomic<int>  _swapIntervalRequest{-1};
+  std::atomic<bool> _pauseForBadPerformanceRequest{false};
 #endif
   void        handle(const SDL_WindowEvent* window);
   void        handle(const SDL_MouseMotionEvent* motion);

@@ -156,7 +156,13 @@ bool Application::init(const char* title, int width, int height)
   inited = kAllocatorInited;
 
   // Setup SDL
+#ifdef _WIN32
   if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
+#else
+  // the window is native (host/Host.h); SDL handles audio and controllers. Its video subsystem would take over
+  // the application's event loop.
+  if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_EVENTS) != 0)
+#endif
   {
     _logger.error(TAG "SDL_Init: %s", SDL_GetError());
     goto error;
@@ -192,6 +198,20 @@ bool Application::init(const char* title, int width, int height)
     }
 #endif
 
+#ifndef _WIN32
+    g_mainWindow = host::createMainWindow(title, window_x == SDL_WINDOWPOS_CENTERED ? INT_MIN : window_x,
+                                          window_y == SDL_WINDOWPOS_CENTERED ? INT_MIN : window_y, width, height);
+    if (!g_mainWindow)
+    {
+      _logger.error(TAG "Could not create the main window");
+      goto error;
+    }
+
+    host::setMenuProvider(this);
+    if (_config.getBackgroundInput())
+      setBackgroundInput(true);
+  }
+#else
     // Setup window
     if (SDL_GL_LoadLibrary(NULL) != 0)
     {
@@ -239,6 +259,7 @@ bool Application::init(const char* title, int width, int height)
     if (_config.getBackgroundInput())
       setBackgroundInput(true);
   }
+#endif
 
   inited = kWindowInited;
 
@@ -297,7 +318,11 @@ bool Application::init(const char* title, int width, int height)
 
   inited = kInputInited;
 
+#ifdef _WIN32
   if (!_videoContext.init(&_logger, _window))
+#else
+  if (!_videoContext.init(&_logger))
+#endif
   {
     goto error;
   }
@@ -324,22 +349,22 @@ bool Application::init(const char* title, int width, int height)
 
 #ifndef _WIN32
   // the frontend GL context is current after _videoContext.init
-  if (!gui::init(_window, SDL_GL_GetCurrentContext()))
+  if (!gui::init([](int* width, int* height) { host::getClientSize(width, height); }))
   {
     _logger.error(TAG "Failed to initialize the GUI");
     goto error;
   }
 
-  gui::setMenuRenderer([this]() { drawMenuBar(); });
   gui::setRedraw([this]() { _video.redraw(); });
+  gui::setNativeEventPump(host::pumpEvents);
   _video.setOverlayRenderer(gui::render);
 
   // the Win32 build learns the initial size from the resize caused by attaching its menu; there is no such
-  // event here, so tell the video component now (minus the menu bar)
+  // event here, so tell the video component now (the menu bar is outside of the game view)
   {
     int windowWidth, windowHeight;
-    SDL_GetWindowSize(_window, &windowWidth, &windowHeight);
-    _video.windowResized(windowWidth, windowHeight - gui::menuBarHeight());
+    host::getClientSize(&windowWidth, &windowHeight);
+    _video.windowResized(windowWidth, windowHeight);
   }
 #endif
 
@@ -409,7 +434,12 @@ error:
   case kFifoInited:         _fifo.destroy();
   case kAudioDeviceInited:  _microphone.destroy();
                             SDL_CloseAudioDevice(_audioDev);
+#ifdef _WIN32
   case kWindowInited:       SDL_DestroyWindow(_window);
+#else
+  case kWindowInited:       host::setMenuProvider(nullptr);
+                            host::destroyMainWindow();
+#endif
   case kKeyBindsInited:     _keybinds.destroy();
   case kSdlInited:          SDL_Quit();
   case kAllocatorInited:    _allocator.destroy();
@@ -424,6 +454,11 @@ error:
 
 void Application::processEvents()
 {
+#ifndef _WIN32
+  // the native window's input arrives as SDL events (host/Host.h)
+  host::pumpEvents();
+#endif
+
   SDL_Event event;
   if (!SDL_PollEvent(&event))
     return;
@@ -578,9 +613,9 @@ void Application::stepDuringEventTracking()
     _lastEventTrackingFrame = now - std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
 
   // catching up shouldn't wait for vsync on every frame (the audio buffer paces them)
-  const int swapInterval = SDL_GL_GetSwapInterval();
+  const int swapInterval = VideoContext::getSwapInterval();
   if (swapInterval != 0)
-    SDL_GL_SetSwapInterval(0);
+    VideoContext::setSwapInterval(0);
 
   // the timer may only fire a few times per second (i.e. during a live resize): catch up on up to a quarter of a
   // second of frames, but keep the resize/menu responsive
@@ -622,8 +657,20 @@ void Application::stepDuringEventTracking()
   }
 
   if (swapInterval != 0)
-    SDL_GL_SetSwapInterval(swapInterval);
+    VideoContext::setSwapInterval(swapInterval);
 }
+
+#ifndef _WIN32
+void Application::applyAudioRequests()
+{
+  const int swapInterval = _swapIntervalRequest.exchange(-1);
+  if (swapInterval >= 0)
+    VideoContext::setSwapInterval(swapInterval);
+
+  if (_pauseForBadPerformanceRequest.exchange(false))
+    pauseForBadPerformance();
+}
+#endif
 
 void Application::runSmoothed()
 {
@@ -640,6 +687,7 @@ void Application::runSmoothed()
     // this loop replaces run()'s while a game is running, so do the same per-frame work here
     RA_ProcessUIThreadActions();
     runPendingCommand();
+    applyAudioRequests();
 #endif
     if (_fsm.currentState() != Fsm::State::GameRunning)
       return;
@@ -808,8 +856,12 @@ void Application::saveConfiguration()
   json += _states.serializeSettings();
 
   // window position
-  const Uint32 flags = SDL_GetWindowFlags(_window);
-  if (flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
+#ifdef _WIN32
+  const bool fullscreen = (SDL_GetWindowFlags(_window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
+#else
+  const bool fullscreen = host::isFullscreen();
+#endif
+  if (fullscreen)
   {
     // it doesn't make sense to save fullscreen mode as the player must load a game when they restart
     // the application, and the window position/size will be 0,0 and the desktop resolution
@@ -819,10 +871,18 @@ void Application::saveConfiguration()
     json += ",\"window\":{";
 
     int x, y;
+#ifdef _WIN32
     SDL_GetWindowPosition(_window, &x, &y);
+#else
+    host::getWindowPosition(&x, &y);
+#endif
     json += "\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y);
 
+#ifdef _WIN32
     SDL_GetWindowSize(_window, &x, &y);
+#else
+    host::getClientSize(&x, &y); // the size of the game view (the menu bar is outside of it)
+#endif
     switch (_video.getRotation())
     {
       case Video::Rotation::Ninety:
@@ -880,7 +940,13 @@ void Application::destroy()
   _fifo.destroy();
 
   SDL_CloseAudioDevice(_audioDev);
+#ifdef _WIN32
   SDL_DestroyWindow(_window);
+#else
+  host::setMenuProvider(nullptr);
+  _videoContext.destroy();
+  host::destroyMainWindow();
+#endif
   SDL_Quit();
 
   _allocator.destroy();
@@ -1666,9 +1732,18 @@ bool Application::isPaused() const
   }
 }
 
+bool Application::isFullscreen() const
+{
+#ifdef _WIN32
+  return (SDL_GetWindowFlags(_window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
+#else
+  return host::isFullscreen();
+#endif
+}
+
 void Application::onRotationChanged(Video::Rotation oldRotation, Video::Rotation newRotation)
 {
-  const Uint32 fullscreen = SDL_GetWindowFlags(_window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
+  const bool fullscreen = isFullscreen();
 
   if (!fullscreen)
   {
@@ -1706,6 +1781,7 @@ void Application::s_audioCallback(void* udata, Uint8* stream, int len)
         {
           // some cores don't generate audio when fast forwarding
         }
+#ifdef _WIN32
         else if (SDL_GL_GetSwapInterval() == 1)
         {
           // try turning off VSYNC to see if we can achieve the target framerate
@@ -1716,6 +1792,19 @@ void Application::s_audioCallback(void* udata, Uint8* stream, int len)
         {
           app->pauseForBadPerformance();
         }
+#else
+        // this is the audio thread: GL and the user interface are handled by the main loop (applyAudioRequests)
+        else if (VideoContext::getSwapInterval() == 1)
+        {
+          // try turning off VSYNC to see if we can achieve the target framerate
+          app->_swapIntervalRequest = 0;
+          app->_vsyncDisabledByAudioFaults = true;
+        }
+        else
+        {
+          app->_pauseForBadPerformanceRequest = true;
+        }
+#endif
 
         app->_numAudioFaults /= 2;
       }
@@ -1732,7 +1821,11 @@ void Application::s_audioCallback(void* udata, Uint8* stream, int len)
       {
         if (++app->_numAudioRecoveries == 5)
         {
+#ifdef _WIN32
           SDL_GL_SetSwapInterval(1);
+#else
+          app->_swapIntervalRequest = 1;
+#endif
           app->_vsyncDisabledByAudioFaults = false;
         }
       }
@@ -2502,8 +2595,8 @@ std::string Application::serializeRecentList()
 
 void Application::resizeWindow(unsigned multiplier)
 {
-  Uint32 fullscreen = SDL_GetWindowFlags(_window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
-  
+  const bool fullscreen = isFullscreen();
+
   if (!fullscreen)
   {
     unsigned width, height;
@@ -2527,10 +2620,10 @@ void Application::resizeWindow(unsigned multiplier)
 
 void Application::resizeWindow(int width, int height)
 {
-  int actual_width, actual_height;
 #ifndef _WIN32
-  height += gui::menuBarHeight(); // the requested size is for the game image
-#endif
+  host::setClientSize(width, height); // the size of the game view
+#else
+  int actual_width, actual_height;
   SDL_SetWindowSize(_window, width, height);
 
   /* SDL_SetWindowSize does not always account for the menu size correctly - especially if it wraps
@@ -2542,18 +2635,20 @@ void Application::resizeWindow(int width, int height)
     height += (height - actual_height);
     SDL_SetWindowSize(_window, width, height);
   }
+#endif
 }
 
 void Application::toggleFullscreen()
 {
+#ifndef _WIN32
+  const bool fullscreen = !host::isFullscreen();
+  host::setFullscreen(fullscreen);
+  host::showCursor(!fullscreen);
+#else
   Uint32 fullscreen = SDL_GetWindowFlags(_window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
   if (fullscreen)
   {
-#ifdef _WIN32
     SetMenu(g_mainWindow, _menu);
-#else
-    gui::setMenuBarVisible(true);
-#endif
     SDL_ShowCursor(SDL_ENABLE);
   }
 
@@ -2561,13 +2656,10 @@ void Application::toggleFullscreen()
 
   if (!fullscreen)
   {
-#ifdef _WIN32
     SetMenu(g_mainWindow, NULL);
-#else
-    gui::setMenuBarVisible(false);
-#endif
     SDL_ShowCursor(SDL_DISABLE);
   }
+#endif
 }
 
 #ifdef _WIN32
@@ -2777,12 +2869,7 @@ void Application::handle(const SDL_WindowEvent* window)
 {
   if (window->event == SDL_WINDOWEVENT_SIZE_CHANGED)
   {
-#ifdef _WIN32
     _video.windowResized(window->data1, window->data2);
-#else
-    // the ImGui menu bar is drawn inside the window, above the game image
-    _video.windowResized(window->data1, window->data2 - gui::menuBarHeight());
-#endif
   }
 }
 
@@ -2991,6 +3078,10 @@ void Application::handle(const KeyBinds::Action action, unsigned extra)
 
 void Application::updateMouseCapture()
 {
+#ifndef _WIN32
+  // TODO: capture the mouse for the native window (relative mouse mode needs an SDL window)
+  return;
+#endif
   SDL_SetRelativeMouseMode(_keybinds.hasGameFocus() && _config.getGameFocusCaptureMouse() ? SDL_TRUE : SDL_FALSE);
 }
 

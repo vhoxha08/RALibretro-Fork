@@ -24,8 +24,8 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <imgui.h>
 #include <SDL_opengl.h>
 #include <backends/imgui_impl_opengl3.h>
-#include <backends/imgui_impl_sdl2.h>
 
+#include <cfloat>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -40,8 +40,9 @@ namespace
   };
 
   bool s_initialized = false;
-  bool s_menuBarVisible = true;
-  std::function<void()> s_menuRenderer;
+  std::function<void(int*, int*)> s_getSize;
+  std::function<void()> s_nativeEventPump;
+  Uint64 s_lastFrameTime = 0;
   std::function<void()> s_redraw;
   std::vector<Modal*> s_modals;
   int s_externalModals = 0; // modal windows drawn by someone else (the toolkit), see runModalLoop
@@ -53,6 +54,120 @@ namespace
     return !s_modals.empty() || s_externalModals > 0;
   }
 
+  ImGuiKey toImGuiKey(SDL_Keycode key)
+  {
+    if (key >= SDLK_a && key <= SDLK_z)
+      return (ImGuiKey)(ImGuiKey_A + (key - SDLK_a));
+    if (key >= SDLK_0 && key <= SDLK_9)
+      return (ImGuiKey)(ImGuiKey_0 + (key - SDLK_0));
+    if (key >= SDLK_F1 && key <= SDLK_F12)
+      return (ImGuiKey)(ImGuiKey_F1 + (key - SDLK_F1));
+    if (key >= SDLK_KP_1 && key <= SDLK_KP_9)
+      return (ImGuiKey)(ImGuiKey_Keypad1 + (key - SDLK_KP_1));
+
+    switch (key)
+    {
+      case SDLK_TAB:          return ImGuiKey_Tab;
+      case SDLK_LEFT:         return ImGuiKey_LeftArrow;
+      case SDLK_RIGHT:        return ImGuiKey_RightArrow;
+      case SDLK_UP:           return ImGuiKey_UpArrow;
+      case SDLK_DOWN:         return ImGuiKey_DownArrow;
+      case SDLK_PAGEUP:       return ImGuiKey_PageUp;
+      case SDLK_PAGEDOWN:     return ImGuiKey_PageDown;
+      case SDLK_HOME:         return ImGuiKey_Home;
+      case SDLK_END:          return ImGuiKey_End;
+      case SDLK_INSERT:       return ImGuiKey_Insert;
+      case SDLK_DELETE:       return ImGuiKey_Delete;
+      case SDLK_BACKSPACE:    return ImGuiKey_Backspace;
+      case SDLK_SPACE:        return ImGuiKey_Space;
+      case SDLK_RETURN:       return ImGuiKey_Enter;
+      case SDLK_ESCAPE:       return ImGuiKey_Escape;
+      case SDLK_QUOTE:        return ImGuiKey_Apostrophe;
+      case SDLK_COMMA:        return ImGuiKey_Comma;
+      case SDLK_MINUS:        return ImGuiKey_Minus;
+      case SDLK_PERIOD:       return ImGuiKey_Period;
+      case SDLK_SLASH:        return ImGuiKey_Slash;
+      case SDLK_SEMICOLON:    return ImGuiKey_Semicolon;
+      case SDLK_EQUALS:       return ImGuiKey_Equal;
+      case SDLK_LEFTBRACKET:  return ImGuiKey_LeftBracket;
+      case SDLK_BACKSLASH:    return ImGuiKey_Backslash;
+      case SDLK_RIGHTBRACKET: return ImGuiKey_RightBracket;
+      case SDLK_BACKQUOTE:    return ImGuiKey_GraveAccent;
+      case SDLK_KP_0:         return ImGuiKey_Keypad0;
+      case SDLK_KP_ENTER:     return ImGuiKey_KeypadEnter;
+      case SDLK_LCTRL:        return ImGuiKey_LeftCtrl;
+      case SDLK_LSHIFT:       return ImGuiKey_LeftShift;
+      case SDLK_LALT:         return ImGuiKey_LeftAlt;
+      case SDLK_LGUI:         return ImGuiKey_LeftSuper;
+      case SDLK_RCTRL:        return ImGuiKey_RightCtrl;
+      case SDLK_RSHIFT:       return ImGuiKey_RightShift;
+      case SDLK_RALT:         return ImGuiKey_RightAlt;
+      case SDLK_RGUI:         return ImGuiKey_RightSuper;
+      default:                return ImGuiKey_None;
+    }
+  }
+
+  // Feeds an SDL event (from SDL or synthesized by the native window) to ImGui.
+  void addEvent(ImGuiIO& io, const SDL_Event& event)
+  {
+    switch (event.type)
+    {
+      case SDL_MOUSEMOTION:
+        io.AddMousePosEvent((float)event.motion.x, (float)event.motion.y);
+        break;
+
+      case SDL_MOUSEBUTTONDOWN:
+      case SDL_MOUSEBUTTONUP:
+      {
+        int button = -1;
+        switch (event.button.button)
+        {
+          case SDL_BUTTON_LEFT:   button = 0; break;
+          case SDL_BUTTON_RIGHT:  button = 1; break;
+          case SDL_BUTTON_MIDDLE: button = 2; break;
+        }
+        if (button >= 0)
+        {
+          io.AddMousePosEvent((float)event.button.x, (float)event.button.y);
+          io.AddMouseButtonEvent(button, event.type == SDL_MOUSEBUTTONDOWN);
+        }
+        break;
+      }
+
+      case SDL_MOUSEWHEEL:
+        io.AddMouseWheelEvent(-event.wheel.preciseX, event.wheel.preciseY);
+        break;
+
+      case SDL_TEXTINPUT:
+        io.AddInputCharactersUTF8(event.text.text);
+        break;
+
+      case SDL_KEYDOWN:
+      case SDL_KEYUP:
+      {
+        const Uint16 mod = event.key.keysym.mod;
+        io.AddKeyEvent(ImGuiMod_Ctrl, (mod & KMOD_CTRL) != 0);
+        io.AddKeyEvent(ImGuiMod_Shift, (mod & KMOD_SHIFT) != 0);
+        io.AddKeyEvent(ImGuiMod_Alt, (mod & KMOD_ALT) != 0);
+        io.AddKeyEvent(ImGuiMod_Super, (mod & KMOD_GUI) != 0);
+
+        const ImGuiKey key = toImGuiKey(event.key.keysym.sym);
+        if (key != ImGuiKey_None)
+          io.AddKeyEvent(key, event.type == SDL_KEYDOWN);
+        break;
+      }
+
+      case SDL_WINDOWEVENT:
+        if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)
+          io.AddFocusEvent(true);
+        else if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+          io.AddFocusEvent(false);
+        else if (event.window.event == SDL_WINDOWEVENT_LEAVE)
+          io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+        break;
+    }
+  }
+
   // Pumps events and redraws until isOpen returns false or the application is asked to quit.
   // Returns false if quitting (the quit request is put back for the main loop).
   bool modalLoop(const std::function<bool()>& isOpen, const std::function<bool(const SDL_Event&)>& onEvent,
@@ -60,6 +175,9 @@ namespace
   {
     while (isOpen())
     {
+      if (s_nativeEventPump)
+        s_nativeEventPump();
+
       SDL_Event event;
       while (SDL_PollEvent(&event))
       {
@@ -92,8 +210,10 @@ namespace
   }
 }
 
-bool gui::init(SDL_Window* window, SDL_GLContext glContext)
+bool gui::init(std::function<void(int*, int*)> getSize)
 {
+  s_getSize = std::move(getSize);
+
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
 
@@ -123,14 +243,9 @@ bool gui::init(SDL_Window* window, SDL_GLContext glContext)
     }
   }
 
-  if (!ImGui_ImplSDL2_InitForOpenGL(window, glContext))
-    return false;
-
+  io.BackendPlatformName = "ralibretro";
   if (!ImGui_ImplOpenGL3_Init("#version 150"))
-  {
-    ImGui_ImplSDL2_Shutdown();
     return false;
-  }
 
   s_initialized = true;
   return true;
@@ -142,14 +257,13 @@ void gui::destroy()
     return;
 
   ImGui_ImplOpenGL3_Shutdown();
-  ImGui_ImplSDL2_Shutdown();
   ImGui::DestroyContext();
   s_initialized = false;
 }
 
-void gui::setMenuRenderer(std::function<void()> renderer)
+void gui::setNativeEventPump(std::function<void()> pump)
 {
-  s_menuRenderer = std::move(renderer);
+  s_nativeEventPump = std::move(pump);
 }
 
 void gui::setRedraw(std::function<void()> redraw)
@@ -162,9 +276,9 @@ bool gui::processEvent(const SDL_Event& event)
   if (!s_initialized)
     return false;
 
-  ImGui_ImplSDL2_ProcessEvent(&event);
+  ImGuiIO& io = ImGui::GetIO();
+  addEvent(io, event);
 
-  const ImGuiIO& io = ImGui::GetIO();
   switch (event.type)
   {
     case SDL_KEYDOWN:
@@ -181,24 +295,6 @@ bool gui::processEvent(const SDL_Event& event)
     default:
       return false;
   }
-}
-
-int gui::menuBarHeight()
-{
-  if (!s_initialized || !s_menuBarVisible)
-    return 0;
-
-  // same as ImGui::GetFrameHeight(), which is only valid inside a frame. The font size is not known before
-  // the first frame, so assume the size of the default font (13px) until then.
-  const ImGuiStyle& style = ImGui::GetStyle();
-  const float fontSize = (ImGui::GetFontSize() > 0.0f) ? ImGui::GetFontSize() :
-                         (style.FontSizeBase > 0.0f) ? style.FontSizeBase : 13.0f;
-  return (int)(fontSize + style.FramePadding.y * 2.0f + 0.5f);
-}
-
-void gui::setMenuBarVisible(bool visible)
-{
-  s_menuBarVisible = visible;
 }
 
 bool gui::isModalActive()
@@ -236,20 +332,22 @@ void gui::render()
   if (!s_initialized)
     return;
 
-  ImGui_ImplOpenGL3_NewFrame();
-  ImGui_ImplSDL2_NewFrame();
-  ImGui::NewFrame();
+  ImGuiIO& io = ImGui::GetIO();
+  int width = 0, height = 0;
+  if (s_getSize)
+    s_getSize(&width, &height);
+  io.DisplaySize = ImVec2((float)width, (float)height);
+  io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f); // the game view draws at 1x (host/HostMac.mm)
 
-  if (s_menuBarVisible && s_menuRenderer)
-  {
-    ImGui::BeginDisabled(anyModalActive());
-    if (ImGui::BeginMainMenuBar())
-    {
-      s_menuRenderer();
-      ImGui::EndMainMenuBar();
-    }
-    ImGui::EndDisabled();
-  }
+  const Uint64 now = SDL_GetPerformanceCounter();
+  io.DeltaTime = s_lastFrameTime ? (float)((double)(now - s_lastFrameTime) / (double)SDL_GetPerformanceFrequency()) :
+                                   1.0f / 60.0f;
+  if (io.DeltaTime <= 0.0f)
+    io.DeltaTime = 1.0f / 1000.0f;
+  s_lastFrameTime = now;
+
+  ImGui_ImplOpenGL3_NewFrame();
+  ImGui::NewFrame();
 
   // the toolkit's windows (login, message boxes, ...)
   if (s_toolkitRenderer)
@@ -287,7 +385,6 @@ void gui::render()
   ImGui::Render();
 
   // the game image may have changed the viewport and blending state
-  ImGuiIO& io = ImGui::GetIO();
   glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }

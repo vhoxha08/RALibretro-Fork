@@ -22,6 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include "components/VideoContext.h"
+#ifndef _WIN32
+#include "host/Host.h"
+#endif
 #include "Core.h"
 
 #include "Application.h"
@@ -1579,23 +1583,28 @@ bool libretro::Core::handleSystemAVInfoChanged()
 
 void libretro::Core::resetVsync()
 {
-  SDL_DisplayMode displayMode;
   int monitorRefreshRate = 60; // assume 60Hz if we can't get an actual value
+#ifdef _WIN32
+  SDL_DisplayMode displayMode;
   if (SDL_GetCurrentDisplayMode(0, &displayMode) == 0 && displayMode.refresh_rate > 0)
   {
     monitorRefreshRate = displayMode.refresh_rate;
   }
+#else
+  if (host::displayRefreshRate() > 0)
+    monitorRefreshRate = host::displayRefreshRate();
+#endif
 
   // give two fps of leniency so things like 60.1 NES will run on 59.97 monitors
   if (_systemAVInfo.timing.fps > monitorRefreshRate + 2)
   {
     // requested refresh rate is greater than monitor refresh rate, disable vsync
-    SDL_GL_SetSwapInterval(0);
+    VideoContext::setSwapInterval(0);
   }
   else
   {
     // requested refresh rate is greater than monitor refresh rate, disable vsync
-    SDL_GL_SetSwapInterval(1);
+    VideoContext::setSwapInterval(1);
   }
 }
 
