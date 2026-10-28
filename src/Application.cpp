@@ -19,9 +19,6 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Application.h"
 
-#ifdef __APPLE__
-#include "MacEventTracking.h"
-#endif
 #include "RA_BuildVer.h"
 
 #include <SDL_syswm.h>
@@ -58,6 +55,12 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include "Platform.h"
 #include "RA_Interface_Host.h"
 #include "Gui.h"
+
+#include <condition_variable>
+
+#ifndef _WIN32
+#include <pthread.h>
+#endif
 
 #define TAG "[APP] "
 
@@ -356,7 +359,6 @@ bool Application::init(const char* title, int width, int height)
   }
 
   gui::setRedraw([this]() { _video.redraw(); });
-  gui::setNativeEventPump(host::pumpEvents);
   host::setTextInputHandler(gui::addTextInput);
   _video.setOverlayRenderer(gui::render);
 
@@ -392,14 +394,12 @@ bool Application::init(const char* title, int width, int height)
     // RA_Init, which may already show some.
     RA_SetModalLoopHandler(runToolkitModalLoop);
     gui::setToolkitRenderer([]() { RA_RenderImGui(); });
-    gui::setPerFrame([]() { RA_ProcessUIThreadActions(); });
+    // the main thread waits for the menus while a dialog runs its own loop
+    gui::setPerFrame([this]() { runGameQueries(); });
 #endif
     RA_Init(g_mainWindow);
 #ifndef _WIN32
     installHostServices();
-#endif
-#ifdef __APPLE__
-    startEventTrackingTimer([this]() { stepDuringEventTracking(); });
 #endif
   }
 
@@ -453,15 +453,21 @@ error:
   return false;
 }
 
-void Application::processEvents()
-{
 #ifndef _WIN32
-  // the native window's input arrives as SDL events (host/Host.h)
-  host::pumpEvents();
+// The main thread pumps SDL's events (host::runMainLoop) and pushes the native window's input; the game thread
+// only takes them from the queue.
+static bool pollEvent(SDL_Event* event)
+{
+  return SDL_PeepEvents(event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT) > 0;
+}
+#else
+#define pollEvent SDL_PollEvent
 #endif
 
+void Application::processEvents()
+{
   SDL_Event event;
-  if (!SDL_PollEvent(&event))
+  if (!pollEvent(&event))
     return;
 
   do
@@ -531,7 +537,7 @@ void Application::processEvents()
         handle(&event.window);
         break;
     }
-  } while (SDL_PollEvent(&event));
+  } while (pollEvent(&event));
 
   if (hardcore() != lastHardcore)
   {
@@ -594,74 +600,139 @@ void Application::runTurbo()
   }
 }
 
-void Application::stepDuringEventTracking()
+#ifndef _WIN32
+struct Application::GameQuery
 {
-  // macOS is running its own event loop (a window being resized, an open menu) inside processEvents(); keep the
-  // game running meanwhile. Events are left to macOS until it returns.
-  if (_inEventTrackingStep || !_processingEvents || _fsm.currentState() != Fsm::State::GameRunning ||
-      _config.getFastForwarding())
+  const std::function<void()>* fn;
+  std::mutex mutex;
+  std::condition_variable condition;
+  bool started = false;
+  bool cancelled = false;
+  bool done = false;
+};
+
+void Application::postToGameThread(std::function<void()> fn)
+{
+  if (isGameThread())
   {
+    fn();
     return;
   }
 
-  // macOS only fires the timer a few times per second while tracking; run the frames that are due since the
-  // last one (the audio buffer still paces them)
-  const double fps = (_core.getSystemAVInfo() && _core.getSystemAVInfo()->timing.fps > 0) ?
-    _core.getSystemAVInfo()->timing.fps : 60.0;
-  const auto frameTime = std::chrono::duration<double>(1.0 / fps);
-  const auto now = std::chrono::steady_clock::now();
-  if (now - _lastEventTrackingFrame > std::chrono::milliseconds(500))
-    _lastEventTrackingFrame = now - std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
-
-  // catching up shouldn't wait for vsync on every frame (the audio buffer paces them)
-  const int swapInterval = VideoContext::getSwapInterval();
-  if (swapInterval != 0)
-    VideoContext::setSwapInterval(0);
-
-  // the timer may only fire a few times per second (i.e. during a live resize): catch up on up to a quarter of a
-  // second of frames, but keep the resize/menu responsive
-  _inEventTrackingStep = true;
-
-  // the audio callback plays silence (and doesn't drain the buffer) while events are processed; we're in the
-  // middle of processEvents(), but running frames, so let it play them
-  _processingEvents = false;
-
-  // don't wait for room in the audio buffer: the frames are already paced by the clock, and every millisecond
-  // spent here delays the resize/menu the user is interacting with
-  _audio.setBlocking(false);
-
-  const int maxFrames = std::max(1, (int)(fps / 4));
-  for (int i = 0; i < maxFrames && std::chrono::steady_clock::now() - _lastEventTrackingFrame >= frameTime &&
-                  std::chrono::steady_clock::now() - now < std::chrono::milliseconds(20); i++)
-  {
-    _core.step(true, true);
-    RA_DoAchievementsFrame();
-    _lastEventTrackingFrame += std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
-    _eventTrackingFrames++;
-  }
-  _audio.setBlocking(true);
-  _processingEvents = true;
-  _inEventTrackingStep = false;
-  _eventTrackingStepTime += std::chrono::steady_clock::now() - now;
-
-  _eventTrackingTicks++;
-  if (now - _eventTrackingStatsStart >= std::chrono::seconds(1))
-  {
-    if (_eventTrackingStatsStart != std::chrono::steady_clock::time_point())
-      _logger.debug(TAG "while tracking: %d timer ticks, %d frames (%d ms) in the last %d ms", _eventTrackingTicks,
-                    _eventTrackingFrames,
-                    (int)std::chrono::duration_cast<std::chrono::milliseconds>(_eventTrackingStepTime).count(),
-                    (int)std::chrono::duration_cast<std::chrono::milliseconds>(now - _eventTrackingStatsStart).count());
-    _eventTrackingStatsStart = now;
-    _eventTrackingTicks = _eventTrackingFrames = 0;
-    _eventTrackingStepTime = {};
-  }
-
-  if (swapInterval != 0)
-    VideoContext::setSwapInterval(swapInterval);
+  std::lock_guard<std::mutex> lock(_gameThreadMutex);
+  _gameTasks.push_back(std::move(fn));
 }
 
-#ifndef _WIN32
+bool Application::queryGameThread(const std::function<void()>& fn, std::chrono::milliseconds timeout)
+{
+  if (isGameThread())
+  {
+    fn();
+    return true;
+  }
+
+  auto query = std::make_shared<GameQuery>();
+  query->fn = &fn;
+  {
+    std::lock_guard<std::mutex> lock(_gameThreadMutex);
+    _gameQueries.push_back(query);
+  }
+
+  std::unique_lock<std::mutex> lock(query->mutex);
+  if (!query->condition.wait_for(lock, timeout, [&query]() { return query->started; }))
+  {
+    // fn refers to the caller's state: it mustn't run once we're gone
+    query->cancelled = true;
+    return false;
+  }
+
+  query->condition.wait(lock, [&query]() { return query->done; });
+  return true;
+}
+
+void Application::runGameQueries()
+{
+  for (;;)
+  {
+    std::shared_ptr<GameQuery> query;
+    {
+      std::lock_guard<std::mutex> lock(_gameThreadMutex);
+      if (_gameQueries.empty())
+        return;
+
+      query = std::move(_gameQueries.front());
+      _gameQueries.pop_front();
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(query->mutex);
+      if (query->cancelled)
+        continue;
+      query->started = true;
+      query->condition.notify_all();
+    }
+
+    (*query->fn)();
+
+    std::lock_guard<std::mutex> lock(query->mutex);
+    query->done = true;
+    query->condition.notify_all();
+  }
+}
+
+bool Application::runThreaded(int argc, char* argv[])
+{
+  // the GL contexts move to the game thread
+  host::releaseGLContext();
+
+  bool ok = false;
+  std::function<void()> game = [this, argc, argv, &ok]() {
+    _gameThreadId = std::this_thread::get_id();
+    _videoContext.enableCoreContext(false);
+
+    ok = handleArgs(argc, argv);
+    if (ok)
+      run();
+
+    host::releaseGLContext();
+    host::exitMainLoop();
+  };
+
+  // cores may need as much stack as they had on the main thread (std::thread only gets 512KB on macOS)
+  pthread_attr_t attributes;
+  pthread_attr_init(&attributes);
+  pthread_attr_setstacksize(&attributes, 8 * 1024 * 1024);
+  pthread_t thread;
+  const int error = pthread_create(&thread, &attributes, [](void* fn) -> void* {
+#ifdef __APPLE__
+    pthread_setname_np("game");
+#else
+    pthread_setname_np(pthread_self(), "game");
+#endif
+    (*static_cast<std::function<void()>*>(fn))();
+    return nullptr;
+  }, &game);
+  pthread_attr_destroy(&attributes);
+  if (error != 0)
+  {
+    _logger.error(TAG "Could not start the game thread: %d", error);
+    return false;
+  }
+
+  // the toolkit's windows and the work it queued for its UI thread (on Windows its DLL uses the Win32 message loop)
+  host::runMainLoop([]() { RA_ProcessUIThreadActions(); });
+  pthread_join(thread, nullptr);
+
+  // shut down on the main thread
+  _gameThreadId = std::this_thread::get_id();
+  _videoContext.enableCoreContext(false);
+
+  // the game loop is gone: drop what was still queued for it
+  std::lock_guard<std::mutex> lock(_gameThreadMutex);
+  _gameTasks.clear();
+  return ok;
+}
+
 void Application::applyAudioRequests()
 {
   const int swapInterval = _swapIntervalRequest.exchange(-1);
@@ -686,7 +757,6 @@ void Application::runSmoothed()
     _processingEvents = false;
 #ifndef _WIN32
     // this loop replaces run()'s while a game is running, so do the same per-frame work here
-    RA_ProcessUIThreadActions();
     runPendingCommand();
     applyAudioRequests();
 #endif
@@ -765,11 +835,8 @@ void Application::run()
       // handle any pending events
       processEvents();
 #ifndef _WIN32
-      // run work the toolkit queued for this thread (on Windows its DLL uses the Win32 message loop)
-      RA_ProcessUIThreadActions();
-#endif
-#ifndef _WIN32
       runPendingCommand();
+      applyAudioRequests();
 #endif
 
       switch (_fsm.currentState())

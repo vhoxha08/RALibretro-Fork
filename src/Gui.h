@@ -33,15 +33,13 @@ namespace gui
   bool init(std::function<void(int*, int*)> getSize);
   void destroy();
 
-  // Handles the native window's events; called by the modal loops before polling SDL's queue.
-  void setNativeEventPump(std::function<void()> pump);
   // Redraws the window (game image + GUI). Used while a modal dialog runs its own loop.
   void setRedraw(std::function<void()> redraw);
 
   // Returns true if ImGui uses the event (i.e. typing into a field or clicking a menu), so the game ignores it.
   bool processEvent(const SDL_Event& event);
 
-  // Text typed into the window (UTF-8).
+  // Text typed into the window (UTF-8). Can be called from any thread.
   void addTextInput(const char* utf8);
 
   // Builds and renders one GUI frame. Called with the frontend GL context current, before the swap.

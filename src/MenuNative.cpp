@@ -19,12 +19,14 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 // The main menu for the macOS/Linux build (a native menu bar, see host/Host.h). Mirrors menu.rc; selecting an
 // item runs the same Application::handleCommand as the Win32 menu. The menus are rebuilt from the application
-// state each time they open instead of having their items updated.
+// state each time they open instead of having their items updated. They are shown by the main thread, but built
+// and handled on the game thread, which owns the application state.
 
 #ifndef _WIN32
 
 #include "Application.h"
 #include "Emulator.h"
+#include "Gui.h"
 #include "Util.h"
 #include "resource.h"
 
@@ -87,13 +89,69 @@ static std::string stripAccelerator(const std::string& caption)
 
 void Application::menuItem(host::MenuSink& sink, const std::string& label, unsigned id, bool enabled, bool checked)
 {
-  sink.item(label, id, enabled && isMenuCommandEnabled(id), checked);
+  // like the Win32 menu, which can't be used while a dialog is open
+  sink.item(label, id, enabled && isMenuCommandEnabled(id) && !gui::isModalActive(), checked);
+}
+
+namespace
+{
+  // Records a menu (on the game thread) for the main thread to show.
+  template <typename Entry>
+  class RecordingSink : public host::MenuSink
+  {
+  public:
+    explicit RecordingSink(std::vector<Entry>& entries) : _entries(entries) {}
+
+    void beginMenu(const std::string& label) override { _entries.push_back({Entry::Kind::Begin, label, 0, true, false}); }
+    void endMenu() override { _entries.push_back({Entry::Kind::End, std::string(), 0, true, false}); }
+    void item(const std::string& label, unsigned id, bool enabled, bool checked) override
+    {
+      _entries.push_back({Entry::Kind::Item, label, id, enabled, checked});
+    }
+    void separator() override { _entries.push_back({Entry::Kind::Separator, std::string(), 0, true, false}); }
+
+  private:
+    std::vector<Entry>& _entries;
+  };
+}
+
+void Application::buildMenu(host::Menu menu, host::MenuSink& sink)
+{
+  // main thread: the game thread knows the state. It answers within a frame, unless it is busy (i.e. loading a
+  // game) or waiting for the main thread itself (a message box); then show the menu as it was last time.
+  std::vector<MenuEntry> entries;
+  if (queryGameThread([this, menu, &entries]() {
+        RecordingSink<MenuEntry> recorder(entries);
+        buildMenuItems(menu, recorder);
+      }, std::chrono::milliseconds(250)))
+  {
+    _menuCache[menu] = entries;
+  }
+  else
+  {
+    entries = _menuCache[menu];
+  }
+
+  for (const auto& entry : entries)
+  {
+    switch (entry.kind)
+    {
+      case MenuEntry::Kind::Begin: sink.beginMenu(entry.label); break;
+      case MenuEntry::Kind::End: sink.endMenu(); break;
+      case MenuEntry::Kind::Item: sink.item(entry.label, entry.id, entry.enabled, entry.checked); break;
+      case MenuEntry::Kind::Separator: sink.separator(); break;
+    }
+  }
 }
 
 void Application::onMenuCommand(unsigned id)
 {
-  // handled after the native events, from the main loop (like the Win32 WM_COMMAND)
-  _pendingCommand = id;
+  // handled by the game loop (like the Win32 WM_COMMAND)
+  postToGameThread([this, id]() {
+    // the quit request may have been handled first; the core is gone by then
+    if (_fsm.currentState() != Fsm::State::Quit)
+      handleCommand(id);
+  });
 }
 
 void Application::addSystemsMenu(host::MenuSink& sink)
@@ -178,20 +236,26 @@ void Application::addDiscMenu(host::MenuSink& sink)
 
 void Application::runPendingCommand()
 {
-  if (_pendingCommand == 0)
-    return;
+  runGameQueries();
 
-  const unsigned cmd = _pendingCommand;
-  _pendingCommand = 0;
+  // one at a time: a command may quit
+  for (;;)
+  {
+    std::function<void()> task;
+    {
+      std::lock_guard<std::mutex> lock(_gameThreadMutex);
+      if (_gameTasks.empty())
+        return;
 
-  // the quit request may have been handled in the same pass; the core is gone by then
-  if (_fsm.currentState() == Fsm::State::Quit)
-    return;
+      task = std::move(_gameTasks.front());
+      _gameTasks.pop_front();
+    }
 
-  handleCommand(cmd);
+    task();
+  }
 }
 
-void Application::buildMenu(host::Menu menu, host::MenuSink& sink)
+void Application::buildMenuItems(host::Menu menu, host::MenuSink& sink)
 {
   switch (menu)
   {

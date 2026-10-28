@@ -22,8 +22,11 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 // The native user interface of the macOS/Linux build (wxWidgets): the main window with its menu bar and the
 // OpenGL view the game is drawn in. The Windows build uses SDL and Win32 instead.
 //
-// Input from the window (keys, text, mouse, resizing, closing) is turned into SDL events and pushed on SDL's
-// event queue, so the application keeps handling input as SDL events.
+// Input from the window (keys, mouse, resizing, closing) is turned into SDL events and pushed on SDL's event
+// queue, so the application keeps handling input as SDL events.
+//
+// The native user interface runs on the main thread (runMainLoop) while the game runs on its own thread. The
+// window functions can be called from either thread: they are carried out on the main thread.
 #ifndef _WIN32
 
 #include <functional>
@@ -40,8 +43,18 @@ namespace host
   void setTextInputHandler(std::function<void(const char*)> handler);
 
   // Handles the native events that are waiting (menus, window changes, the toolkit's windows). Window input is
-  // pushed on SDL's queue for the caller to poll afterwards.
+  // pushed on SDL's queue for the caller to poll afterwards. Main thread only, before runMainLoop.
   void pumpEvents();
+
+  // ===== threads =====
+
+  bool isMainThread();
+  // Runs fn on the main thread: right away when called from it, otherwise queued (and waited for if wait is set).
+  void runOnMainThread(std::function<void()> fn, bool wait);
+  // Runs the native event loop on the main thread until exitMainLoop is called (from any thread). tick runs every
+  // few milliseconds, also while a menu is open or the window is being resized. SDL's events are pumped with it.
+  void runMainLoop(std::function<void()> tick);
+  void exitMainLoop();
 
   // ===== main window =====
 
@@ -102,10 +115,12 @@ namespace host
 
   // ===== OpenGL =====
 
-  // Contexts for the game view. The second one shares objects with the first.
+  // Contexts for the game view. The second one shares objects with the first. The first context created draws to
+  // the game view. A context is current on one thread at a time: release it before another thread makes it current.
   void* createGLContext(void* shareWith);
   void  destroyGLContext(void* context);
   void  makeGLContextCurrent(void* context);
+  void  releaseGLContext();
   void  swapBuffers();
   void  setSwapInterval(int interval);
   int   getSwapInterval();

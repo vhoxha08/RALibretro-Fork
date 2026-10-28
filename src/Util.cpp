@@ -39,6 +39,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef _CONSOLE
 #include <curl/curl.h>
 #include <nfd.h>
+#include "host/Host.h"
 #endif
 #include <filesystem>
 #endif
@@ -899,6 +900,15 @@ static void parseFilter(const std::string& extensionsFilter, std::vector<std::st
 static std::string runFileDialog(const std::string& extensionsFilter, const char* defaultExtension,
                                  const std::string& initialDirectory, bool save)
 {
+  // the dialog belongs to the main thread
+  if (!host::isMainThread())
+  {
+    std::string path;
+    host::runOnMainThread([&]() { path = runFileDialog(extensionsFilter, defaultExtension, initialDirectory, save); },
+                          true);
+    return path;
+  }
+
   std::vector<std::string> names, specs;
   parseFilter(extensionsFilter, names, specs);
 

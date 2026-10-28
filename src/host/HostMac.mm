@@ -43,6 +43,36 @@ namespace hostmac
     [NSApp activateIgnoringOtherApps:YES];
   }
 
+  void makeCurrent(void* glContext)
+  {
+    [(__bridge NSOpenGLContext*)glContext makeCurrentContext];
+  }
+
+  void clearCurrent()
+  {
+    [NSOpenGLContext clearCurrentContext];
+  }
+
+  // The view changed size: the drawable follows (main thread). Locked against the game thread's drawing.
+  void updateContext(void* glContext)
+  {
+    NSOpenGLContext* context = (__bridge NSOpenGLContext*)glContext;
+    CGLLockContext([context CGLContextObj]);
+    [context update];
+    CGLUnlockContext([context CGLContextObj]);
+  }
+
+  void flushCurrent()
+  {
+    CGLContextObj context = CGLGetCurrentContext();
+    if (context)
+    {
+      CGLLockContext(context);
+      CGLFlushDrawable(context);
+      CGLUnlockContext(context);
+    }
+  }
+
   void setSwapInterval(int interval)
   {
     CGLContextObj context = CGLGetCurrentContext();

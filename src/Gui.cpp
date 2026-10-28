@@ -27,6 +27,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <cfloat>
 #include <cstdio>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -41,7 +42,9 @@ namespace
 
   bool s_initialized = false;
   std::function<void(int*, int*)> s_getSize;
-  std::function<void()> s_nativeEventPump;
+  // text typed into the window comes from the main thread
+  std::mutex s_textInputMutex;
+  std::string s_textInput;
   Uint64 s_lastFrameTime = 0;
   std::function<void()> s_redraw;
   std::vector<Modal*> s_modals;
@@ -175,11 +178,9 @@ namespace
   {
     while (isOpen())
     {
-      if (s_nativeEventPump)
-        s_nativeEventPump();
-
+      // the main thread pumps SDL's events
       SDL_Event event;
-      while (SDL_PollEvent(&event))
+      while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT) > 0)
       {
         if (event.type == SDL_QUIT)
         {
@@ -261,11 +262,6 @@ void gui::destroy()
   s_initialized = false;
 }
 
-void gui::setNativeEventPump(std::function<void()> pump)
-{
-  s_nativeEventPump = std::move(pump);
-}
-
 void gui::setRedraw(std::function<void()> redraw)
 {
   s_redraw = std::move(redraw);
@@ -299,8 +295,8 @@ bool gui::processEvent(const SDL_Event& event)
 
 void gui::addTextInput(const char* utf8)
 {
-  if (s_initialized)
-    ImGui::GetIO().AddInputCharactersUTF8(utf8);
+  std::lock_guard<std::mutex> lock(s_textInputMutex);
+  s_textInput += utf8;
 }
 
 bool gui::isModalActive()
@@ -351,6 +347,15 @@ void gui::render()
   if (io.DeltaTime <= 0.0f)
     io.DeltaTime = 1.0f / 1000.0f;
   s_lastFrameTime = now;
+
+  {
+    std::lock_guard<std::mutex> lock(s_textInputMutex);
+    if (!s_textInput.empty())
+    {
+      io.AddInputCharactersUTF8(s_textInput.c_str());
+      s_textInput.clear();
+    }
+  }
 
   ImGui_ImplOpenGL3_NewFrame();
   ImGui::NewFrame();

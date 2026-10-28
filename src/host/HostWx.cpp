@@ -36,11 +36,16 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <wx/init.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
+#include <wx/thread.h>
+#include <wx/timer.h>
 
+#include <atomic>
 #include <climits>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -49,6 +54,10 @@ namespace hostmac
 {
   void prepareGLView(void* nsView);
   void activateApplication();
+  void makeCurrent(void* glContext);
+  void clearCurrent();
+  void updateContext(void* glContext);
+  void flushCurrent();
   void setSwapInterval(int interval);
   int  getSwapInterval();
   void* getGLProcAddress(const char* name);
@@ -69,6 +78,16 @@ namespace
   host::MenuProvider* s_menuProvider = nullptr;
   wxEventLoopBase* s_eventLoop = nullptr;
   std::unique_ptr<wxEventLoopActivator> s_eventLoopActivator;
+
+  // the window's state, for the game thread (updated on the main thread)
+  std::atomic<int> s_clientWidth{0};
+  std::atomic<int> s_clientHeight{0};
+  std::atomic<int> s_windowX{0};
+  std::atomic<int> s_windowY{0};
+  std::atomic<bool> s_fullscreen{false};
+
+  // the context that draws to the game view
+  wxGLContext* s_viewContext = nullptr;
 
   // ===== input as SDL events =====
 
@@ -235,6 +254,13 @@ namespace
 
       Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
         const wxSize size = GetClientSize();
+        s_clientWidth = size.GetWidth();
+        s_clientHeight = size.GetHeight();
+        s_fullscreen = GetParent() && static_cast<wxTopLevelWindow*>(GetParent())->IsFullScreen();
+#ifdef __APPLE__
+        if (s_viewContext)
+          hostmac::updateContext(s_viewContext->GetWXGLContext());
+#endif
         pushWindowEvent(SDL_WINDOWEVENT_SIZE_CHANGED, size.GetWidth(), size.GetHeight());
         event.Skip();
       });
@@ -404,6 +430,12 @@ namespace
         quit.type = SDL_QUIT;
         SDL_PushEvent(&quit);
       });
+      Bind(wxEVT_MOVE, [this](wxMoveEvent& event) {
+        const wxPoint position = GetPosition();
+        s_windowX = position.x;
+        s_windowY = position.y;
+        event.Skip();
+      });
       Bind(wxEVT_ACTIVATE, [](wxActivateEvent& event) {
         pushWindowEvent(event.GetActive() ? SDL_WINDOWEVENT_FOCUS_GAINED : SDL_WINDOWEVENT_FOCUS_LOST);
         event.Skip();
@@ -519,6 +551,64 @@ void host::pumpEvents()
   wxTheApp->ProcessIdle();
 }
 
+// ===== threads =====
+
+bool host::isMainThread()
+{
+  return wxIsMainThread();
+}
+
+void host::runOnMainThread(std::function<void()> fn, bool wait)
+{
+  if (wxIsMainThread())
+  {
+    fn();
+    return;
+  }
+
+  if (!wait)
+  {
+    wxTheApp->CallAfter(std::move(fn));
+    return;
+  }
+
+  std::mutex mutex;
+  std::condition_variable condition;
+  bool done = false;
+  wxTheApp->CallAfter([&]() {
+    fn();
+    std::lock_guard<std::mutex> lock(mutex);
+    done = true;
+    condition.notify_all();
+  });
+
+  std::unique_lock<std::mutex> lock(mutex);
+  condition.wait(lock, [&done]() { return done; });
+}
+
+void host::runMainLoop(std::function<void()> tick)
+{
+  // wx timers fire in all run loop modes on macOS, so this also runs while a menu is open or a window is resized
+  wxTimer timer;
+  timer.Bind(wxEVT_TIMER, [&tick](wxTimerEvent&) {
+    SDL_PumpEvents(); // SDL wants its events pumped on the main thread (controllers)
+    if (tick)
+      tick();
+  });
+  timer.Start(4);
+
+  s_eventLoop->Run();
+  timer.Stop();
+}
+
+void host::exitMainLoop()
+{
+  runOnMainThread([]() {
+    if (s_eventLoop && s_eventLoop->IsRunning())
+      s_eventLoop->Exit();
+  }, false);
+}
+
 // ===== main window =====
 
 void* host::createMainWindow(const char* title, int x, int y, int width, int height)
@@ -532,6 +622,14 @@ void* host::createMainWindow(const char* title, int x, int y, int width, int hei
 
   s_frame->rebuildAll();
   s_frame->Show();
+  {
+    const wxSize size = s_frame->canvas()->GetClientSize();
+    s_clientWidth = size.GetWidth();
+    s_clientHeight = size.GetHeight();
+    const wxPoint position = s_frame->GetPosition();
+    s_windowX = position.x;
+    s_windowY = position.y;
+  }
   s_frame->canvas()->SetFocus();
 #ifdef __APPLE__
   hostmac::activateApplication();
@@ -555,45 +653,52 @@ void host::destroyMainWindow()
 
 void host::getWindowPosition(int* x, int* y)
 {
-  const wxPoint position = s_frame ? s_frame->GetPosition() : wxPoint(0, 0);
-  *x = position.x;
-  *y = position.y;
+  *x = s_windowX;
+  *y = s_windowY;
 }
 
 void host::getClientSize(int* width, int* height)
 {
-  const wxSize size = s_frame ? s_frame->canvas()->GetClientSize() : wxSize(0, 0);
-  *width = size.GetWidth();
-  *height = size.GetHeight();
+  *width = s_clientWidth;
+  *height = s_clientHeight;
 }
 
 void host::setClientSize(int width, int height)
 {
-  if (s_frame)
-    s_frame->SetClientSize(width, height);
+  runOnMainThread([width, height]() {
+    if (s_frame)
+      s_frame->SetClientSize(width, height);
+  }, false);
 }
 
 void host::setTitle(const std::string& title)
 {
-  if (s_frame)
-    s_frame->SetTitle(wxString::FromUTF8(title));
+  runOnMainThread([title]() {
+    if (s_frame)
+      s_frame->SetTitle(wxString::FromUTF8(title));
+  }, false);
 }
 
 bool host::isFullscreen()
 {
-  return s_frame && s_frame->IsFullScreen();
+  return s_fullscreen;
 }
 
 void host::setFullscreen(bool fullscreen)
 {
-  if (s_frame)
-    s_frame->ShowFullScreen(fullscreen);
+  s_fullscreen = fullscreen; // right away, so toggling twice quickly works
+  runOnMainThread([fullscreen]() {
+    if (s_frame)
+      s_frame->ShowFullScreen(fullscreen);
+  }, false);
 }
 
 void host::showCursor(bool show)
 {
-  if (s_frame)
-    s_frame->canvas()->SetCursor(show ? wxNullCursor : wxCursor(wxCURSOR_BLANK));
+  runOnMainThread([show]() {
+    if (s_frame)
+      s_frame->canvas()->SetCursor(show ? wxNullCursor : wxCursor(wxCURSOR_BLANK));
+  }, false);
 }
 
 // ===== menu bar =====
@@ -609,6 +714,14 @@ void host::setMenuProvider(MenuProvider* provider)
 
 int host::messageBox(const char* text, const char* caption, unsigned type)
 {
+  if (!wxIsMainThread())
+  {
+    const std::string textCopy(text), captionCopy(caption);
+    int result = IDCANCEL;
+    runOnMainThread([&]() { result = messageBox(textCopy.c_str(), captionCopy.c_str(), type); }, true);
+    return result;
+  }
+
   long style = wxCENTRE;
   if ((type & MB_ICONWARNING) == MB_ICONWARNING)
     style |= wxICON_WARNING;
@@ -636,6 +749,13 @@ int host::messageBox(const char* text, const char* caption, unsigned type)
 
 void host::setClipboardText(const char* utf8Text)
 {
+  if (!wxIsMainThread())
+  {
+    const std::string text(utf8Text);
+    runOnMainThread([text]() { setClipboardText(text.c_str()); }, true);
+    return;
+  }
+
   wxClipboardLocker locker;
   if (!!locker)
     wxTheClipboard->SetData(new wxTextDataObject(wxString::FromUTF8(utf8Text)));
@@ -643,6 +763,13 @@ void host::setClipboardText(const char* utf8Text)
 
 std::string host::getClipboardText()
 {
+  if (!wxIsMainThread())
+  {
+    std::string text;
+    runOnMainThread([&text]() { text = getClipboardText(); }, true);
+    return text;
+  }
+
   wxClipboardLocker locker;
   if (!locker || !wxTheClipboard->IsSupported(wxDF_UNICODETEXT))
     return std::string();
@@ -663,24 +790,51 @@ void* host::createGLContext(void* shareWith)
     delete context;
     return nullptr;
   }
+
+  if (!s_viewContext)
+    s_viewContext = context;
   return context;
 }
 
 void host::destroyGLContext(void* context)
 {
+  if (context == s_viewContext)
+    s_viewContext = nullptr;
   delete static_cast<wxGLContext*>(context);
 }
 
 void host::makeGLContextCurrent(void* context)
 {
-  if (s_frame && context)
-    static_cast<wxGLContext*>(context)->SetCurrent(*s_frame->canvas());
+  if (!s_frame || !context)
+    return;
+
+#ifdef __APPLE__
+  // attaching a context to the view is main thread only; the game thread uses the contexts attached during init
+  if (!wxIsMainThread())
+  {
+    hostmac::makeCurrent(static_cast<wxGLContext*>(context)->GetWXGLContext());
+    return;
+  }
+#endif
+
+  static_cast<wxGLContext*>(context)->SetCurrent(*s_frame->canvas());
+}
+
+void host::releaseGLContext()
+{
+#ifdef __APPLE__
+  hostmac::clearCurrent();
+#endif
 }
 
 void host::swapBuffers()
 {
+#ifdef __APPLE__
+  hostmac::flushCurrent();
+#else
   if (s_frame)
     s_frame->canvas()->SwapBuffers();
+#endif
 }
 
 void host::setSwapInterval(int interval)
@@ -713,6 +867,13 @@ void* host::getGLProcAddress(const char* name)
 
 int host::displayRefreshRate()
 {
+  if (!wxIsMainThread())
+  {
+    int rate = 0;
+    runOnMainThread([&rate]() { rate = displayRefreshRate(); }, true);
+    return rate;
+  }
+
   if (!s_frame)
     return 0;
 

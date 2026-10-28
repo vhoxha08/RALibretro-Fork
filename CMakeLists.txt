@@ -146,8 +146,7 @@ target_link_libraries(RALibretro PRIVATE RAIntegrationWx wx::gl wx::core wx::bas
 if(APPLE)
   # OpenGL is deprecated (but available) on macOS
   target_compile_definitions(RALibretro PRIVATE GL_SILENCE_DEPRECATION)
-  # keeps the game running while macOS tracks a window resize or an open menu
-  target_sources(RALibretro PRIVATE src/MacEventTracking.mm src/host/HostMac.mm)
+  target_sources(RALibretro PRIVATE src/host/HostMac.mm)
   target_link_libraries(RALibretro PRIVATE "-framework AppKit")
 endif()
 

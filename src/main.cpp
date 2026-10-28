@@ -45,26 +45,34 @@ void getGameName(char name[], size_t len)
   name[len - 1] = '\0';
 }
 
+// The toolkit calls these from its UI thread or from the game loop (RA_DoAchievementsFrame). Elsewhere than on
+// Windows the game runs on its own thread, which they are handed to.
+#ifdef _WIN32
+#define ON_GAME_THREAD(code) code
+#else
+#define ON_GAME_THREAD(code) app.postToGameThread([=]() { code; })
+#endif
+
 void pauseEmulation()
 {
-  app.pauseGame(true);
+  ON_GAME_THREAD(app.pauseGame(true));
 }
 
 void resume()
 {
-  app.pauseGame(false);
+  ON_GAME_THREAD(app.pauseGame(false));
 }
 
 void reset()
 {
   // this is called when the user switches from non-hardcore to hardcore - validate the config settings
-  if (app.validateHardcoreEnablement())
-    app.resetGame();
+  ON_GAME_THREAD(if (app.validateHardcoreEnablement()) app.resetGame());
 }
 
 void loadROM(const char* path)
 {
-  app.loadGame(path);
+  const std::string pathCopy(path);
+  ON_GAME_THREAD(app.loadGame(pathCopy));
 }
 
 extern "C" void abort_handler(int signal_number)
@@ -91,6 +99,14 @@ int main(int argc, char* argv[])
 #endif
 
   bool ok = app.init("RALibRetro", 640, 480);
+#ifndef _WIN32
+  // the game runs on its own thread; this one runs the user interface
+  if (ok)
+  {
+    ok = app.runThreaded(argc, argv);
+    app.destroy();
+  }
+#else
   ok &= app.handleArgs(argc, argv);
 
   if (ok)
@@ -110,6 +126,7 @@ int main(int argc, char* argv[])
 
     app.destroy();
   }
+#endif
 
 #ifndef _WIN32
   host::shutdown();

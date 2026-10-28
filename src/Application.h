@@ -21,7 +21,13 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <atomic>
 #include <chrono>
+#include <deque>
+#include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <SDL.h>
@@ -63,6 +69,14 @@ public:
   void run();
   void destroy();
 
+#ifndef _WIN32
+  // Runs the game (handleArgs, then run) on its own thread while the calling (main) thread runs the native user
+  // interface, until the application quits. Returns false if the command line couldn't be handled.
+  bool runThreaded(int argc, char* argv[]);
+  // Runs fn on the game thread: right away when called from it, otherwise from the game loop.
+  void postToGameThread(std::function<void()> fn);
+#endif
+
   // FSM
   bool loadCore(const std::string& coreName);
   void updateMenu();
@@ -103,7 +117,6 @@ protected:
   // Helpers
   void        processEvents();
   void        runSmoothed();
-  void        stepDuringEventTracking();
   void        runTurbo();
   void        pauseForBadPerformance();
 
@@ -141,9 +154,10 @@ protected:
   void        addDiscMenu(host::MenuSink& sink);
   void        menuItem(host::MenuSink& sink, const std::string& label, unsigned id, bool enabled = true,
                        bool checked = false);
+  void        buildMenuItems(host::Menu menu, host::MenuSink& sink);
   void        runPendingCommand();
 
-  // work the audio callback asks the main loop to do (GL and the user interface belong to the main thread)
+  // work the audio callback asks the game loop to do (GL belongs to the game thread)
   void        applyAudioRequests();
   std::atomic<int>  _swapIntervalRequest{-1};
   std::atomic<bool> _pauseForBadPerformanceRequest{false};
@@ -192,13 +206,7 @@ protected:
   int          _numAudioRecoveries;
   int          _audioGeneratedDuringFastForward;
   bool         _vsyncDisabledByAudioFaults;
-  bool         _processingEvents;
-  bool         _inEventTrackingStep = false;
-  std::chrono::steady_clock::time_point _lastEventTrackingFrame;
-  std::chrono::steady_clock::time_point _eventTrackingStatsStart;
-  int _eventTrackingTicks = 0;
-  int _eventTrackingFrames = 0;
-  std::chrono::steady_clock::duration _eventTrackingStepTime{};
+  std::atomic<bool> _processingEvents{false};
 
   KeyBinds _keybinds;
   std::vector<RecentItem> _recentList;
@@ -220,7 +228,32 @@ protected:
   HMENU _cdRomMenu;
 #ifndef _WIN32
   bool _fastForwardChecked = false; // the Windows build keeps this in the Turbo menu item
-  unsigned _pendingCommand = 0;     // menu selection, handled after the GUI frame is drawn
+
+  // ===== threads (see runThreaded) =====
+
+  struct GameQuery;
+
+  bool isGameThread() const { return std::this_thread::get_id() == _gameThreadId; }
+  // Runs fn on the game thread and waits for it, but at most timeout. Returns false if fn didn't run (it never
+  // will). Also served while a modal dialog runs its own loop, unlike postToGameThread's work.
+  bool queryGameThread(const std::function<void()>& fn, std::chrono::milliseconds timeout);
+  void runGameQueries();
+
+  std::thread::id _gameThreadId = std::this_thread::get_id();
+  std::mutex _gameThreadMutex;
+  std::deque<std::function<void()>> _gameTasks;
+  std::deque<std::shared_ptr<GameQuery>> _gameQueries;
+
+  // a menu as built on the game thread, for the main thread to show
+  struct MenuEntry
+  {
+    enum class Kind { Begin, End, Item, Separator } kind;
+    std::string label;
+    unsigned id;
+    bool enabled;
+    bool checked;
+  };
+  std::map<host::Menu, std::vector<MenuEntry>> _menuCache; // main thread: the last menus the game thread built
 #endif
 
   int _absViewMouseX;
