@@ -178,6 +178,9 @@ protected:
   bool         _processingEvents;
   bool         _inEventTrackingStep = false;
   std::chrono::steady_clock::time_point _lastEventTrackingFrame;
+  std::chrono::steady_clock::time_point _eventTrackingStatsStart;
+  int _eventTrackingTicks = 0;
+  int _eventTrackingFrames = 0;
 
   KeyBinds _keybinds;
   std::vector<RecentItem> _recentList;

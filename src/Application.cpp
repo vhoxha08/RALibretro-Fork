@@ -574,7 +574,7 @@ void Application::stepDuringEventTracking()
     _core.getSystemAVInfo()->timing.fps : 60.0;
   const auto frameTime = std::chrono::duration<double>(1.0 / fps);
   const auto now = std::chrono::steady_clock::now();
-  if (now - _lastEventTrackingFrame > std::chrono::milliseconds(250))
+  if (now - _lastEventTrackingFrame > std::chrono::milliseconds(500))
     _lastEventTrackingFrame = now - std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
 
   // catching up shouldn't wait for vsync on every frame (the audio buffer paces them)
@@ -582,14 +582,28 @@ void Application::stepDuringEventTracking()
   if (swapInterval != 0)
     SDL_GL_SetSwapInterval(0);
 
+  // the timer may only fire a few times per second (i.e. during a live resize): catch up on up to a quarter of a
+  // second of frames, but keep the resize/menu responsive
   _inEventTrackingStep = true;
-  for (int i = 0; i < 5 && std::chrono::steady_clock::now() - _lastEventTrackingFrame >= frameTime; i++)
+  const int maxFrames = std::max(1, (int)(fps / 4));
+  for (int i = 0; i < maxFrames && std::chrono::steady_clock::now() - _lastEventTrackingFrame >= frameTime &&
+                  std::chrono::steady_clock::now() - now < std::chrono::milliseconds(100); i++)
   {
     _core.step(true, true);
     RA_DoAchievementsFrame();
     _lastEventTrackingFrame += std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
+    _eventTrackingFrames++;
   }
   _inEventTrackingStep = false;
+
+  _eventTrackingTicks++;
+  if (now - _eventTrackingStatsStart >= std::chrono::seconds(1))
+  {
+    if (_eventTrackingStatsStart != std::chrono::steady_clock::time_point())
+      _logger.debug(TAG "while tracking: %d timer ticks, %d frames in the last second", _eventTrackingTicks, _eventTrackingFrames);
+    _eventTrackingStatsStart = now;
+    _eventTrackingTicks = _eventTrackingFrames = 0;
+  }
 
   if (swapInterval != 0)
     SDL_GL_SetSwapInterval(swapInterval);
