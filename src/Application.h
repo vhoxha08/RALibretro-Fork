@@ -19,6 +19,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -181,6 +182,7 @@ protected:
   std::chrono::steady_clock::time_point _eventTrackingStatsStart;
   int _eventTrackingTicks = 0;
   int _eventTrackingFrames = 0;
+  std::chrono::steady_clock::duration _eventTrackingStepTime{};
 
   KeyBinds _keybinds;
   std::vector<RecentItem> _recentList;

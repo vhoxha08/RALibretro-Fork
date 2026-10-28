@@ -585,6 +585,11 @@ void Application::stepDuringEventTracking()
   // the timer may only fire a few times per second (i.e. during a live resize): catch up on up to a quarter of a
   // second of frames, but keep the resize/menu responsive
   _inEventTrackingStep = true;
+
+  // the audio callback plays silence (and doesn't drain the buffer) while events are processed; we're in the
+  // middle of processEvents(), but running frames, so let it play them
+  _processingEvents = false;
+
   const int maxFrames = std::max(1, (int)(fps / 4));
   for (int i = 0; i < maxFrames && std::chrono::steady_clock::now() - _lastEventTrackingFrame >= frameTime &&
                   std::chrono::steady_clock::now() - now < std::chrono::milliseconds(100); i++)
@@ -594,15 +599,21 @@ void Application::stepDuringEventTracking()
     _lastEventTrackingFrame += std::chrono::duration_cast<std::chrono::steady_clock::duration>(frameTime);
     _eventTrackingFrames++;
   }
+  _processingEvents = true;
   _inEventTrackingStep = false;
+  _eventTrackingStepTime += std::chrono::steady_clock::now() - now;
 
   _eventTrackingTicks++;
   if (now - _eventTrackingStatsStart >= std::chrono::seconds(1))
   {
     if (_eventTrackingStatsStart != std::chrono::steady_clock::time_point())
-      _logger.debug(TAG "while tracking: %d timer ticks, %d frames in the last second", _eventTrackingTicks, _eventTrackingFrames);
+      _logger.debug(TAG "while tracking: %d timer ticks, %d frames (%d ms) in the last %d ms", _eventTrackingTicks,
+                    _eventTrackingFrames,
+                    (int)std::chrono::duration_cast<std::chrono::milliseconds>(_eventTrackingStepTime).count(),
+                    (int)std::chrono::duration_cast<std::chrono::milliseconds>(now - _eventTrackingStatsStart).count());
     _eventTrackingStatsStart = now;
     _eventTrackingTicks = _eventTrackingFrames = 0;
+    _eventTrackingStepTime = {};
   }
 
   if (swapInterval != 0)
