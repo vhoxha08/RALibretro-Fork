@@ -75,6 +75,8 @@ public:
   void autoAssign();
   void buttonEvent(int port, Button button, bool pressed);
   void axisEvent(int port, Axis axis, int16_t value);
+  // releases every button and centers every axis (i.e. when the window loses the focus while some are held)
+  void releaseAll();
   void processEvent(const SDL_Event* event, KeyBinds* keyBinds, libretro::VideoComponent* video);
   void mouseButtonEvent(MouseButton button, bool pressed);
   void mouseMoveEvent(int relative_x, int relative_y, int absolute_x, int absolute_y);

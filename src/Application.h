@@ -116,6 +116,7 @@ protected:
 
   // Helpers
   void        processEvents();
+  bool        ignoreControllerInput();
   void        runSmoothed();
   void        runTurbo();
   void        pauseForBadPerformance();

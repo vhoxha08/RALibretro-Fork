@@ -480,6 +480,9 @@ void Application::processEvents()
       case SDL_CONTROLLERBUTTONUP:
       case SDL_CONTROLLERBUTTONDOWN:
       {
+        if (ignoreControllerInput())
+          break;
+
         unsigned extra;
         KeyBinds::Action action = _keybinds.translate(&event.cbutton, &extra);
         handle(action, extra);
@@ -488,6 +491,9 @@ void Application::processEvents()
 
       case SDL_CONTROLLERAXISMOTION:
       {
+        if (ignoreControllerInput())
+          break;
+
         KeyBinds::Action action1, action2;
         unsigned extra1, extra2;
         _keybinds.translate(&event.caxis, _input, &action1, &extra1, &action2, &extra2);
@@ -2921,8 +2927,25 @@ void Application::handleCommand(unsigned cmd)
   }
 }
 
+bool Application::ignoreControllerInput()
+{
+#ifdef _WIN32
+  return false; // SDL ignores them itself (SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS)
+#else
+  // SDL only does that when it has a window of its own
+  return !_config.getBackgroundInput() && !host::isMainWindowActive();
+#endif
+}
+
 void Application::handle(const SDL_WindowEvent* window)
 {
+#ifndef _WIN32
+  // nothing is released while the window doesn't have the focus: release everything now, like SDL does for its
+  // windows (keys are released as well, their key up events go elsewhere)
+  if (window->event == SDL_WINDOWEVENT_FOCUS_LOST)
+    _input.releaseAll();
+#endif
+
   if (window->event == SDL_WINDOWEVENT_SIZE_CHANGED)
   {
     _video.windowResized(window->data1, window->data2);
@@ -2956,7 +2979,12 @@ void Application::handle(const SDL_MouseMotionEvent* motion)
     else if (viewY >= viewScaledHeight)
       viewY = viewScaledHeight - 1;
 
-    if (SDL_GetRelativeMouseMode())
+#ifdef _WIN32
+    const bool relative = SDL_GetRelativeMouseMode();
+#else
+    const bool relative = host::isMouseCaptured();
+#endif
+    if (relative)
     {
       _absViewMouseX += motion->xrel;
       _absViewMouseY += motion->yrel;
@@ -3134,11 +3162,11 @@ void Application::handle(const KeyBinds::Action action, unsigned extra)
 
 void Application::updateMouseCapture()
 {
-#ifndef _WIN32
-  // TODO: capture the mouse for the native window (relative mouse mode needs an SDL window)
-  return;
-#endif
+#ifdef _WIN32
   SDL_SetRelativeMouseMode(_keybinds.hasGameFocus() && _config.getGameFocusCaptureMouse() ? SDL_TRUE : SDL_FALSE);
+#else
+  host::setMouseCaptured(_keybinds.hasGameFocus() && _config.getGameFocusCaptureMouse());
+#endif
 }
 
 void Application::toggleFastForwarding(unsigned extra)

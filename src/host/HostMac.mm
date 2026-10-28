@@ -73,6 +73,50 @@ namespace hostmac
     }
   }
 
+  // ===== relative mouse =====
+
+  static id s_mouseMonitor = nil;
+
+  // Moves the cursor over the middle of the view, where the clicks reach the game.
+  void centerMouse(void* nsView)
+  {
+    NSView* view = (__bridge NSView*)nsView;
+    NSRect frame = [view.window convertRectToScreen:[view convertRect:view.bounds toView:nil]];
+    // Cocoa's screen coordinates start at the bottom of the main screen, Quartz's at its top
+    const CGFloat mainHeight = NSScreen.screens.firstObject.frame.size.height;
+    CGWarpMouseCursorPosition(CGPointMake(NSMidX(frame), mainHeight - NSMidY(frame)));
+  }
+
+  void startRelativeMouse(void* nsView, void (*onMotion)(double dx, double dy))
+  {
+    if (s_mouseMonitor != nil)
+      return;
+
+    centerMouse(nsView);
+    CGAssociateMouseAndMouseCursorPosition(false); // the cursor stays put, the movements are still reported
+    [NSCursor hide];
+
+    const NSEventMask mask = NSEventMaskMouseMoved | NSEventMaskLeftMouseDragged | NSEventMaskRightMouseDragged |
+                             NSEventMaskOtherMouseDragged;
+    s_mouseMonitor = [[NSEvent addLocalMonitorForEventsMatchingMask:mask handler:^NSEvent*(NSEvent* event) {
+      onMotion(event.deltaX, event.deltaY);
+      return event;
+    }] retain];
+  }
+
+  void stopRelativeMouse()
+  {
+    if (s_mouseMonitor == nil)
+      return;
+
+    [NSEvent removeMonitor:s_mouseMonitor];
+    [s_mouseMonitor release];
+    s_mouseMonitor = nil;
+
+    CGAssociateMouseAndMouseCursorPosition(true);
+    [NSCursor unhide];
+  }
+
   void setSwapInterval(int interval)
   {
     CGLContextObj context = CGLGetCurrentContext();

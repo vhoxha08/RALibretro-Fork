@@ -73,6 +73,15 @@ namespace host
   void setFullscreen(bool fullscreen);
   void showCursor(bool show);
 
+  // Whether the main window has the focus (not another application, nor one of the application's other windows).
+  bool isMainWindowActive();
+
+  // Confines the mouse to the game view and hides the cursor; movements then arrive as relative SDL mouse motion
+  // (xrel/yrel), like SDL's relative mouse mode. Suspended while the main window doesn't have the focus.
+  void setMouseCaptured(bool captured);
+  // Whether the mouse is captured right now.
+  bool isMouseCaptured();
+
   // ===== menu bar =====
 
   // Receives the items of a menu as it is (re)built.

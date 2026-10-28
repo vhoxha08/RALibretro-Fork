@@ -59,6 +59,9 @@ namespace hostmac
   void clearCurrent();
   void updateContext(void* glContext);
   void flushCurrent();
+  void centerMouse(void* nsView);
+  void startRelativeMouse(void* nsView, void (*onMotion)(double dx, double dy));
+  void stopRelativeMouse();
   void setSwapInterval(int interval);
   int  getSwapInterval();
   void* getGLProcAddress(const char* name);
@@ -189,6 +192,11 @@ namespace
   std::atomic<int> s_windowX{0};
   std::atomic<int> s_windowY{0};
   std::atomic<bool> s_fullscreen{false};
+  std::atomic<bool> s_windowActive{true};
+
+  // mouse capture (see host::setMouseCaptured): wanted by the application, and in effect
+  bool s_mouseCaptureWanted = false;
+  std::atomic<bool> s_mouseCaptured{false};
 
   // the context that draws to the game view
   wxGLContext* s_viewContext = nullptr;
@@ -271,6 +279,8 @@ namespace
 #ifdef __APPLE__
         if (s_viewContext)
           hostmac::updateContext(s_viewContext->GetWXGLContext());
+        if (s_mouseCaptured)
+          hostmac::centerMouse(GetHandle());
 #endif
         pushWindowEvent(SDL_WINDOWEVENT_SIZE_CHANGED, size.GetWidth(), size.GetHeight());
         event.Skip();
@@ -284,6 +294,13 @@ namespace
   private:
     void onMouseMove(wxMouseEvent& event)
     {
+      // while captured the cursor doesn't move; the movements come from onRelativeMotion
+      if (s_mouseCaptured)
+      {
+        event.Skip();
+        return;
+      }
+
       SDL_Event sdlEvent = {};
       sdlEvent.type = SDL_MOUSEMOTION;
       sdlEvent.motion.timestamp = SDL_GetTicks();
@@ -327,6 +344,13 @@ namespace
     int _lastX = 0;
     int _lastY = 0;
   };
+
+  // ===== mouse capture =====
+
+  void onRelativeMotion(double dx, double dy);
+
+  // Captures the mouse while it is wanted and the main window has the focus (main thread).
+  void updateMouseCapture();
 
   // ===== menus =====
 
@@ -448,6 +472,8 @@ namespace
         event.Skip();
       });
       Bind(wxEVT_ACTIVATE, [](wxActivateEvent& event) {
+        s_windowActive = event.GetActive();
+        updateMouseCapture();
         pushWindowEvent(event.GetActive() ? SDL_WINDOWEVENT_FOCUS_GAINED : SDL_WINDOWEVENT_FOCUS_LOST);
         event.Skip();
       });
@@ -494,6 +520,48 @@ namespace
   };
 
   MainFrame* s_frame = nullptr;
+
+  void onRelativeMotion(double dx, double dy)
+  {
+    // keep the fractions of the movements for the next ones
+    static double s_dx = 0.0, s_dy = 0.0;
+    s_dx += dx;
+    s_dy += dy;
+    const int xrel = (int)s_dx;
+    const int yrel = (int)s_dy;
+    s_dx -= xrel;
+    s_dy -= yrel;
+    if (xrel == 0 && yrel == 0)
+      return;
+
+    const wxSize size = s_frame ? s_frame->canvas()->GetClientSize() : wxSize(0, 0);
+    SDL_Event sdlEvent = {};
+    sdlEvent.type = SDL_MOUSEMOTION;
+    sdlEvent.motion.timestamp = SDL_GetTicks();
+    sdlEvent.motion.x = size.GetWidth() / 2;
+    sdlEvent.motion.y = size.GetHeight() / 2;
+    sdlEvent.motion.xrel = xrel;
+    sdlEvent.motion.yrel = yrel;
+    const wxMouseState state = wxGetMouseState();
+    sdlEvent.motion.state = (state.LeftIsDown() ? SDL_BUTTON_LMASK : 0) | (state.MiddleIsDown() ? SDL_BUTTON_MMASK : 0) |
+                            (state.RightIsDown() ? SDL_BUTTON_RMASK : 0);
+    SDL_PushEvent(&sdlEvent);
+  }
+
+  void updateMouseCapture()
+  {
+    const bool capture = s_mouseCaptureWanted && s_windowActive && s_frame != nullptr;
+    if (capture == s_mouseCaptured)
+      return;
+
+#ifdef __APPLE__
+    if (capture)
+      hostmac::startRelativeMouse(s_frame->canvas()->GetHandle(), &onRelativeMotion);
+    else
+      hostmac::stopRelativeMouse();
+    s_mouseCaptured = capture;
+#endif
+  }
 
   wxGLContextAttrs& contextAttributes()
   {
@@ -656,6 +724,9 @@ void host::destroyMainWindow()
   if (!s_frame)
     return;
 
+  s_mouseCaptureWanted = false;
+  updateMouseCapture();
+
   s_frame->Destroy();
   s_frame = nullptr;
   if (wxTheApp)
@@ -702,6 +773,24 @@ void host::setFullscreen(bool fullscreen)
     if (s_frame)
       s_frame->ShowFullScreen(fullscreen);
   }, false);
+}
+
+bool host::isMainWindowActive()
+{
+  return s_windowActive;
+}
+
+void host::setMouseCaptured(bool captured)
+{
+  runOnMainThread([captured]() {
+    s_mouseCaptureWanted = captured;
+    updateMouseCapture();
+  }, false);
+}
+
+bool host::isMouseCaptured()
+{
+  return s_mouseCaptured;
 }
 
 void host::showCursor(bool show)

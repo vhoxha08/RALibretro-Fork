@@ -266,6 +266,18 @@ void Input::buttonEvent(int port, Button button, bool pressed)
     _info[port][_devices[port]]._state &= ~(1 << rbutton);
 }
 
+void Input::releaseAll()
+{
+  for (int port = 0; port < kMaxPorts; port++)
+  {
+    for (int button = (int)Button::kUp; button <= (int)Button::kStart; button++)
+      buttonEvent(port, (Button)button, false);
+
+    for (int axis = (int)Axis::kLeftAxisX; axis <= (int)Axis::kR2; axis++)
+      axisEvent(port, (Axis)axis, 0);
+  }
+}
+
 void Input::axisEvent(int port, Axis axis, int16_t value)
 {
   int raxis;
