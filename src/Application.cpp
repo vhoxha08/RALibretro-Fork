@@ -154,6 +154,10 @@ bool Application::init(const char* title, int width, int height)
 #ifdef _WIN32
   if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 #else
+  // macOS only gives controllers to an application in the background if SDL asks for it when it starts; whether
+  // they're used then is up to the background input setting (see ignoreControllerInput)
+  SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+
   // the window is native (host/Host.h); SDL handles audio and controllers. Its video subsystem would take over
   // the application's event loop.
   if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_EVENTS) != 0)
@@ -3240,9 +3244,9 @@ void Application::toggleBackgroundInput()
 
 void Application::setBackgroundInput(bool enabled)
 {
+#ifdef _WIN32
   SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, enabled ? "1" : "0");
 
-#ifdef _WIN32
   MENUITEMINFO info;
   memset(&info, 0, sizeof(info));
   info.cbSize = sizeof(info);

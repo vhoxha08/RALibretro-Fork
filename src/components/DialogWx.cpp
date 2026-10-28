@@ -223,6 +223,14 @@ void Dialog::retrieveData()
   }
 }
 
+// A control that takes the keyboard focus (see DialogWindow).
+class KeyCatcher : public wxWindow
+{
+public:
+  explicit KeyCatcher(wxWindow* parent) : wxWindow(parent, wxID_ANY, wxPoint(0, 0), wxSize(1, 1), wxWANTS_CHARS) {}
+  bool AcceptsFocus() const override { return true; }
+};
+
 // The native dialog for a Dialog: built from its controls, with the hooks called as the user interacts with it.
 // Hooks change the controls' data (text, visibility, options); the widgets are updated to match afterwards.
 class DialogWindow : public wxDialog
@@ -238,6 +246,16 @@ public:
 
     layout();
     sync();
+
+    // Buttons and check boxes only take the keyboard focus on macOS when Full Keyboard Access is on, and the keys
+    // go nowhere (not even to the dialog) when nothing has it. Unless a text field takes them, keys go to an
+    // invisible control (i.e. the key binding dialog has nothing but buttons).
+    _keyCatcher = new KeyCatcher(this);
+    bool hasTextField = false;
+    for (const auto& cd : _dialog._controlData)
+      hasTextField = hasTextField || (cd._type == Dialog::kEditbox && !cd._readOnly);
+    if (!hasTextField)
+      _keyCatcher->SetFocus();
 
     // like a Win32 dialog: Enter presses the default button (done by wx), Escape cancels. The dialog sees keys
     // before the controls (i.e. to capture a key binding).
@@ -481,6 +499,7 @@ private:
 
   Dialog& _dialog;
   std::vector<wxWindow*> _widgets;
+  KeyCatcher* _keyCatcher = nullptr;
   wxTimer _timer;
   bool _syncing = false;
 };
@@ -495,12 +514,8 @@ bool Dialog::show()
     return updated;
   }
 
-  extern Application app;
+  // (no background input while it's open: the game waits for the dialog, and the main window doesn't have the focus)
   extern HWND g_mainWindow;
-  const bool hasBackgroundInput = app.config().getBackgroundInput();
-
-  if (hasBackgroundInput) /* disable background input while dialog is open */
-    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "0");
 
   _updated = false;
   _closed = false;
@@ -515,8 +530,6 @@ bool Dialog::show()
 
   markClosed();
 
-  if (hasBackgroundInput)
-    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 
   return _updated;
 }

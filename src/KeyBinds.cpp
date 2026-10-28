@@ -2074,9 +2074,11 @@ protected:
     db.addButton("OK", IDOK, 80, 20, 50, 14, true);
     db.addButton("Cancel", IDCANCEL, 140, 20, 50, 14, false);
 
+#ifdef _WIN32
     // the joystick is normally ignored if the SDL window doesn't have focus
     // temporarily disable that behavior
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+#endif
 
     if (db.show(hwnd))
     {
@@ -2085,7 +2087,9 @@ protected:
       setItemText(hwnd, 10000 + button, _buttonLabels[button]);
     }
 
+#ifdef _WIN32
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "0");
+#endif
   }
 
   void exportJson(HWND hwnd)
