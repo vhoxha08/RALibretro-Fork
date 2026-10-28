@@ -29,8 +29,9 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace gui
 {
-  // The frontend's (not the core's) OpenGL context must be current. getSize returns the size of the game view.
-  bool init(std::function<void(int*, int*)> getSize);
+  // The frontend's (not the core's) OpenGL context must be current. getSize returns the size of the game view in
+  // points, getScale its pixels per point.
+  bool init(std::function<void(int*, int*)> getSize, std::function<float()> getScale);
   void destroy();
 
   // Returns true if ImGui uses the event, so the game ignores it.

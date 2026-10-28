@@ -28,11 +28,11 @@ namespace hostmac
 {
   void prepareGLView(void* nsView)
   {
-    // the frontend works in window points (like the SDL window it replaces): draw at 1x
+    // draw at the display's resolution (the frontend converts the window's points to pixels)
     NSView* view = (__bridge NSView*)nsView;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    [view setWantsBestResolutionOpenGLSurface:NO];
+    [view setWantsBestResolutionOpenGLSurface:YES];
 #pragma clang diagnostic pop
   }
 

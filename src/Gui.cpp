@@ -35,6 +35,7 @@ namespace
 {
   bool s_initialized = false;
   std::function<void(int*, int*)> s_getSize;
+  std::function<float()> s_getScale;
   // text typed into the window comes from the main thread
   std::mutex s_textInputMutex;
   std::string s_textInput;
@@ -156,9 +157,10 @@ namespace
   }
 }
 
-bool gui::init(std::function<void(int*, int*)> getSize)
+bool gui::init(std::function<void(int*, int*)> getSize, std::function<float()> getScale)
 {
   s_getSize = std::move(getSize);
+  s_getScale = std::move(getScale);
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -254,7 +256,8 @@ void gui::render()
   if (s_getSize)
     s_getSize(&width, &height);
   io.DisplaySize = ImVec2((float)width, (float)height);
-  io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f); // the game view draws at 1x (host/HostMac.mm)
+  const float scale = s_getScale ? s_getScale() : 1.0f;
+  io.DisplayFramebufferScale = ImVec2(scale, scale);
 
   const Uint64 now = SDL_GetPerformanceCounter();
   io.DeltaTime = s_lastFrameTime ? (float)((double)(now - s_lastFrameTime) / (double)SDL_GetPerformanceFrequency()) :
@@ -282,7 +285,8 @@ void gui::render()
   ImGui::Render();
 
   // the game image may have changed the viewport and blending state
-  glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+  glViewport(0, 0, (int)(io.DisplaySize.x * io.DisplayFramebufferScale.x + 0.5f),
+             (int)(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f));
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 

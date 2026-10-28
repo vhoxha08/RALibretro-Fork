@@ -65,7 +65,9 @@ namespace host
   void destroyMainWindow();
 
   void getWindowPosition(int* x, int* y);
+  // In points; the game view has getContentScale() pixels per point (2 on a Retina display).
   void getClientSize(int* width, int* height);
+  float getContentScale();
   void setClientSize(int width, int height);
   void setTitle(const std::string& title);
 

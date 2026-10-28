@@ -57,7 +57,10 @@ public:
 
   virtual void showSpeedIndicator(Speed visibleIndicator) override;
 
+  // the size of the drawable, in pixels
   void windowResized(unsigned width, unsigned height);
+  // on-screen messages and indicators are drawn this many times bigger (i.e. 2 on a Retina display)
+  void setOsdScale(unsigned scale) { _osdScale = scale > 0 ? scale : 1; }
   void getFramebufferSize(unsigned* width, unsigned* height, enum retro_pixel_format* format);
   const void* getFramebuffer(unsigned* width, unsigned* height, unsigned* pitch, enum retro_pixel_format* format);
   void setFramebuffer(void* pixels, unsigned width, unsigned height, unsigned pitch);
@@ -113,6 +116,7 @@ protected:
   GLuint                  _speedIndicatorTexture;
 
   unsigned                _windowWidth;
+  unsigned                _osdScale = 1;
   unsigned                _windowHeight;
   unsigned                _textureWidth;
   unsigned                _textureHeight;

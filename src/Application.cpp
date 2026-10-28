@@ -345,7 +345,7 @@ bool Application::init(const char* title, int width, int height)
 
 #ifndef _WIN32
   // the frontend GL context is current after _videoContext.init
-  if (!gui::init([](int* width, int* height) { host::getClientSize(width, height); }))
+  if (!gui::init([](int* width, int* height) { host::getClientSize(width, height); }, host::getContentScale))
   {
     _logger.error(TAG "Failed to initialize the GUI");
     goto error;
@@ -359,7 +359,9 @@ bool Application::init(const char* title, int width, int height)
   {
     int windowWidth, windowHeight;
     host::getClientSize(&windowWidth, &windowHeight);
-    _video.windowResized(windowWidth, windowHeight);
+    const float scale = host::getContentScale();
+    _video.setOsdScale((unsigned)(scale + 0.5f));
+    _video.windowResized((unsigned)(windowWidth * scale + 0.5f), (unsigned)(windowHeight * scale + 0.5f));
   }
 #endif
 
@@ -1814,7 +1816,13 @@ void Application::onRotationChanged(Video::Rotation oldRotation, Video::Rotation
     {
       int width = _video.getWindowWidth();
       int height = _video.getWindowHeight();
+#ifndef _WIN32
+      // the window is sized in points, the video in pixels
+      const float scale = host::getContentScale();
+      resizeWindow((int)(height / scale + 0.5f), (int)(width / scale + 0.5f));
+#else
       resizeWindow(height, width);
+#endif
 
       /* immediately call windowResized as rotation may change again before the window message is processed */
       _video.windowResized(height, width);
@@ -2948,7 +2956,14 @@ void Application::handle(const SDL_WindowEvent* window)
 
   if (window->event == SDL_WINDOWEVENT_SIZE_CHANGED)
   {
+#ifdef _WIN32
     _video.windowResized(window->data1, window->data2);
+#else
+    // the event is in points (like SDL's); the video draws in pixels
+    const float scale = host::getContentScale();
+    _video.setOsdScale((unsigned)(scale + 0.5f));
+    _video.windowResized((unsigned)(window->data1 * scale + 0.5f), (unsigned)(window->data2 * scale + 0.5f));
+#endif
   }
 }
 
@@ -2958,6 +2973,17 @@ void Application::handle(const SDL_MouseMotionEvent* motion)
   if (viewWidth)
   {
     int rel_x, rel_y, abs_x, abs_y;
+
+#ifndef _WIN32
+    // the event is in points (like SDL's); the view is measured in pixels
+    const float scale = host::getContentScale();
+    SDL_MouseMotionEvent scaled = *motion;
+    scaled.x = (Sint32)(motion->x * scale);
+    scaled.y = (Sint32)(motion->y * scale);
+    scaled.xrel = (Sint32)(motion->xrel * scale);
+    scaled.yrel = (Sint32)(motion->yrel * scale);
+    motion = &scaled;
+#endif
 
     // convert the window position (motion->x/y) to view-relative positions (viewX/Y)
     const int viewScaledWidth = _video.getViewScaledWidth();

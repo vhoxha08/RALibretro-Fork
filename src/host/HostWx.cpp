@@ -193,6 +193,7 @@ namespace
   std::atomic<int> s_windowY{0};
   std::atomic<bool> s_fullscreen{false};
   std::atomic<bool> s_windowActive{true};
+  std::atomic<float> s_contentScale{1.0f};
 
   // mouse capture (see host::setMouseCaptured): wanted by the application, and in effect
   bool s_mouseCaptureWanted = false;
@@ -271,18 +272,13 @@ namespace
         SDL_PushEvent(&sdlEvent);
       });
 
+      // moving to a display with another resolution changes the drawable's size, but not the window's
+      Bind(wxEVT_DPI_CHANGED, [this](wxDPIChangedEvent& event) {
+        viewChanged();
+        event.Skip();
+      });
       Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
-        const wxSize size = GetClientSize();
-        s_clientWidth = size.GetWidth();
-        s_clientHeight = size.GetHeight();
-        s_fullscreen = GetParent() && static_cast<wxTopLevelWindow*>(GetParent())->IsFullScreen();
-#ifdef __APPLE__
-        if (s_viewContext)
-          hostmac::updateContext(s_viewContext->GetWXGLContext());
-        if (s_mouseCaptured)
-          hostmac::centerMouse(GetHandle());
-#endif
-        pushWindowEvent(SDL_WINDOWEVENT_SIZE_CHANGED, size.GetWidth(), size.GetHeight());
+        viewChanged();
         event.Skip();
       });
       Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
@@ -292,6 +288,22 @@ namespace
     }
 
   private:
+    void viewChanged()
+    {
+      const wxSize size = GetClientSize();
+      s_clientWidth = size.GetWidth();
+      s_clientHeight = size.GetHeight();
+      s_contentScale = (float)GetContentScaleFactor();
+      s_fullscreen = GetParent() && static_cast<wxTopLevelWindow*>(GetParent())->IsFullScreen();
+#ifdef __APPLE__
+      if (s_viewContext)
+        hostmac::updateContext(s_viewContext->GetWXGLContext());
+      if (s_mouseCaptured)
+        hostmac::centerMouse(GetHandle());
+#endif
+      pushWindowEvent(SDL_WINDOWEVENT_SIZE_CHANGED, size.GetWidth(), size.GetHeight());
+    }
+
     void onMouseMove(wxMouseEvent& event)
     {
       // while captured the cursor doesn't move; the movements come from onRelativeMotion
@@ -705,6 +717,7 @@ void* host::createMainWindow(const char* title, int x, int y, int width, int hei
     const wxSize size = s_frame->canvas()->GetClientSize();
     s_clientWidth = size.GetWidth();
     s_clientHeight = size.GetHeight();
+    s_contentScale = (float)s_frame->canvas()->GetContentScaleFactor();
     const wxPoint position = s_frame->GetPosition();
     s_windowX = position.x;
     s_windowY = position.y;
@@ -759,6 +772,11 @@ void host::setTitle(const std::string& title)
     if (s_frame)
       s_frame->SetTitle(wxString::FromUTF8(title));
   }, false);
+}
+
+float host::getContentScale()
+{
+  return s_contentScale;
 }
 
 bool host::isFullscreen()

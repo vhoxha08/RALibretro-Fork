@@ -242,25 +242,27 @@ void Video::draw(bool force)
 
       if (_speedIndicatorTexture != 0)
       {
-        Gl::viewport(_windowWidth - 8 - OSD_SPEED_INDICATOR_WIDTH, _windowHeight - 8 - OSD_SPEED_INDICATOR_HEIGHT,
-          OSD_SPEED_INDICATOR_WIDTH, OSD_SPEED_INDICATOR_WIDTH);
+        const GLint s = (GLint)_osdScale;
+        Gl::viewport(_windowWidth - (8 + OSD_SPEED_INDICATOR_WIDTH) * s, _windowHeight - (8 + OSD_SPEED_INDICATOR_HEIGHT) * s,
+          OSD_SPEED_INDICATOR_WIDTH * s, OSD_SPEED_INDICATOR_WIDTH * s);
         Gl::bindTexture(GL_TEXTURE_2D, _speedIndicatorTexture);
         Gl::uniform1i(_texUniform, 0);
         Gl::drawArrays(GL_TRIANGLE_STRIP, 0, 4);
       }
 
-      const GLint messageHeight = (OSD_PADDING + OSD_CHAR_HEIGHT + OSD_PADDING);
-      const GLint x = 8;
-      GLint y = 8;
+      const GLint s = (GLint)_osdScale;
+      const GLint messageHeight = (OSD_PADDING + OSD_CHAR_HEIGHT + OSD_PADDING) * s;
+      const GLint x = 8 * s;
+      GLint y = 8 * s;
 
       for (int i = _numMessages - 1; i >= 0; --i)
       {
-        Gl::viewport(x, y, _messageWidth[i], messageHeight);
+        Gl::viewport(x, y, _messageWidth[i] * s, messageHeight);
         Gl::bindTexture(GL_TEXTURE_2D, _messageTexture[i]);
         Gl::uniform1i(_texUniform, 0);
         Gl::drawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-        y += messageHeight + 4;
+        y += messageHeight + 4 * s;
 
         if (--_messageFrames[i] == 0)
         {
