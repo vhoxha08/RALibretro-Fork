@@ -166,6 +166,11 @@ protected:
   libretro::LoggerComponent* _logger;
 
   std::string _rootFolder;
+#ifndef _WIN32
+  // files an application bundle provides for the root folder (the cores list, the toolkit's overlay images)
+  std::string _resourcesFolder;
+  void installResources();
+#endif
   std::string _assetsFolder;
   std::string _saveFolder;
   std::string _systemFolder;

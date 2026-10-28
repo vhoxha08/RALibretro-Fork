@@ -40,6 +40,12 @@ extern HWND g_mainWindow;
 #include <unordered_map>
 
 #ifndef _WIN32
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#endif
+
+#ifndef _WIN32
 #include <SDL.h>
 #include <unistd.h>
 #endif
@@ -58,21 +64,42 @@ void Config::initRootFolder()
 
   _rootFolder = util::ucharToUtf8(fullpath);
 #else
-  // Like the Windows build, run "portable" from the executable's folder if Cores are installed next to it.
-  // Otherwise use the per-user data folder (~/Library/Application Support/RALibretro, ~/.local/share/RALibretro).
-  if (char* basePath = SDL_GetBasePath())
+  // Like the Windows build, run "portable" if Cores are installed next to the executable (i.e. in a build folder) or
+  // next to the application bundle. Otherwise use the per-user data folder (~/Library/Application Support/RALibretro,
+  // ~/.local/share/RALibretro), where the bundle's resources are installed (see installResources).
+  std::string basePath; // the executable's folder, or the bundle's Resources folder
+  if (char* path = SDL_GetBasePath())
   {
-    _rootFolder = basePath;
-    SDL_free(basePath);
+    basePath = path;
+    SDL_free(path);
   }
 
-  if (_rootFolder.empty() || !util::exists(_rootFolder + "Cores"))
+  std::string besideBundle;
+  static const std::string bundleResources = ".app/Contents/Resources/";
+  if (basePath.size() > bundleResources.size() &&
+      basePath.compare(basePath.size() - bundleResources.size(), bundleResources.size(), bundleResources) == 0)
   {
-    if (char* prefPath = SDL_GetPrefPath(nullptr, "RALibretro"))
-    {
-      _rootFolder = prefPath;
-      SDL_free(prefPath);
-    }
+    _resourcesFolder = basePath + "Data/";
+    const std::string bundle = basePath.substr(0, basePath.size() - (bundleResources.size() - 4)); // ".../X.app"
+    besideBundle = bundle.substr(0, bundle.find_last_of('/') + 1);
+  }
+
+  if (_resourcesFolder.empty() && !basePath.empty() && util::exists(basePath + "Cores"))
+  {
+    _rootFolder = basePath;
+  }
+  else if (!besideBundle.empty() && util::exists(besideBundle + "Cores"))
+  {
+    _rootFolder = besideBundle;
+  }
+  else if (char* prefPath = SDL_GetPrefPath(nullptr, "RALibretro"))
+  {
+    _rootFolder = prefPath;
+    SDL_free(prefPath);
+  }
+  else
+  {
+    _rootFolder = basePath;
   }
 
   // the code below strips the file name from the executable path; these are already directories
@@ -89,6 +116,43 @@ void Config::initRootFolder()
     _rootFolder = "." PATH_SEPARATOR;
   }
 }
+
+#ifndef _WIN32
+void Config::installResources()
+{
+  // copies the bundle's files that are missing or different (from an older version) to the root folder
+  if (_resourcesFolder.empty() || !util::exists(_resourcesFolder))
+    return;
+
+  namespace fs = std::filesystem;
+  const auto contents = [](const fs::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+  };
+
+  std::error_code error;
+  const fs::path source(_resourcesFolder);
+  for (auto it = fs::recursive_directory_iterator(source, error); !error && it != fs::recursive_directory_iterator();
+       it.increment(error))
+  {
+    if (!it->is_regular_file())
+      continue;
+
+    const fs::path target = fs::path(_rootFolder) / fs::relative(it->path(), source);
+    if (fs::exists(target) && fs::file_size(target, error) == it->file_size() &&
+        contents(target) == contents(it->path()))
+    {
+      continue;
+    }
+
+    fs::create_directories(target.parent_path(), error);
+    if (fs::copy_file(it->path(), target, fs::copy_options::overwrite_existing, error))
+      _logger->info(TAG "Installed %s", target.string().c_str());
+    else
+      _logger->error(TAG "Could not install %s: %s", target.string().c_str(), error.message().c_str());
+  }
+}
+#endif
 
 bool Config::init(libretro::LoggerComponent* logger)
 {
@@ -109,6 +173,10 @@ bool Config::init(libretro::LoggerComponent* logger)
   mkdir(_saveFolder.c_str());
   mkdir(_systemFolder.c_str());
   mkdir(_screenshotsFolder.c_str());
+
+#ifndef _WIN32
+  installResources();
+#endif
 
   _logger->info(TAG "Root folder:        %s", _rootFolder.c_str());
   _logger->info(TAG "Assets folder:      %s", _assetsFolder.c_str());

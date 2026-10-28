@@ -131,16 +131,62 @@ if(APPLE)
   target_link_libraries(RALibretro PRIVATE "-framework AppKit")
 endif()
 
-# Make the build folder a "portable" install: RALibretro uses the executable's folder as its root
-# when it contains Cores/ (with cores.json describing the known cores).
+# Make the build folder a "portable" install: RALibretro uses the folder of the executable (or of the application
+# bundle) as its root when it contains Cores/ (with cores.json describing the known cores).
 add_custom_command(TARGET RALibretro POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:RALibretro>/Cores
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/Cores
   COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/etc/cores.json
-          $<TARGET_FILE_DIR:RALibretro>/Cores/cores.json
+          ${CMAKE_CURRENT_BINARY_DIR}/Cores/cores.json
 )
 
 # The toolkit's overlay images and sounds (copied next to RA_Integration.dll on Windows)
 add_custom_command(TARGET RALibretro POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory ${RA_INTEGRATION_DIR}/RAInterface/overlay
-          $<TARGET_FILE_DIR:RALibretro>/Overlay
+          ${CMAKE_CURRENT_BINARY_DIR}/Overlay
 )
+
+# ---- macOS application bundle (RALibretro.app) -----------------------------------------------
+# Outside of a portable folder, the data goes to ~/Library/Application Support/RALibretro, where the bundle's
+# Resources/Data (the cores list, the overlay) is installed when it starts (see Config::installResources).
+if(APPLE)
+  execute_process(COMMAND git describe --tags --abbrev=0
+                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                  OUTPUT_VARIABLE RALIBRETRO_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  if(NOT RALIBRETRO_VERSION)
+    set(RALIBRETRO_VERSION "0.0")
+  endif()
+  set(RALIBRETRO_MACOS_MIN_VERSION "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+  if(NOT RALIBRETRO_MACOS_MIN_VERSION)
+    set(RALIBRETRO_MACOS_MIN_VERSION "11.0")
+  endif()
+
+  set(RALIBRETRO_ICNS ${CMAKE_CURRENT_BINARY_DIR}/RALibretro.icns)
+  add_custom_command(OUTPUT ${RALIBRETRO_ICNS}
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/make-icns.sh ${CMAKE_CURRENT_SOURCE_DIR}/src/retroarch.ico
+            ${RALIBRETRO_ICNS}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/retroarch.ico ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/make-icns.sh
+  )
+  target_sources(RALibretro PRIVATE ${RALIBRETRO_ICNS})
+  set_source_files_properties(${RALIBRETRO_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+
+  set_target_properties(RALibretro PROPERTIES
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/Info.plist.in
+    MACOSX_BUNDLE_BUNDLE_NAME RALibretro
+    MACOSX_BUNDLE_GUI_IDENTIFIER org.retroachievements.RALibretro
+    MACOSX_BUNDLE_ICON_FILE RALibretro.icns
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${RALIBRETRO_VERSION}
+    MACOSX_BUNDLE_BUNDLE_VERSION ${RALIBRETRO_VERSION}
+    MACOSX_BUNDLE_COPYRIGHT "RetroAchievements"
+  )
+
+  # last: signing the bundle covers everything in it
+  add_custom_command(TARGET RALibretro POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_BUNDLE_CONTENT_DIR:RALibretro>/Resources/Data/Cores
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/etc/cores.json
+            $<TARGET_BUNDLE_CONTENT_DIR:RALibretro>/Resources/Data/Cores/cores.json
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${RA_INTEGRATION_DIR}/RAInterface/overlay
+            $<TARGET_BUNDLE_CONTENT_DIR:RALibretro>/Resources/Data/Overlay
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/etc/macos/bundle-dylibs.sh $<TARGET_BUNDLE_DIR:RALibretro>
+  )
+endif()
