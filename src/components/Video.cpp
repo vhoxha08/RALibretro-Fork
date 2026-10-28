@@ -315,22 +315,46 @@ void Video::draw(bool force)
   }
 }
 
-void Video::setOverlayImage(const uint32_t* argb, int x, int y, unsigned width, unsigned height)
+void Video::setOverlayImage(const uint32_t* argb, int stride, int canvasWidth, int canvasHeight, int x, int y,
+                            int width, int height)
 {
   std::lock_guard<std::mutex> lock(_overlayMutex);
-  if (argb == nullptr || width == 0 || height == 0)
+  if (argb == nullptr || canvasWidth <= 0 || canvasHeight <= 0)
   {
     _overlayPixels.clear();
     _overlayWidth = _overlayHeight = 0;
+    _overlayChanged = true;
+    return;
+  }
+
+  if (canvasWidth != _overlayWidth || canvasHeight != _overlayHeight)
+  {
+    // a new canvas: all of it goes to the texture
+    _overlayPixels.resize((size_t)canvasWidth * canvasHeight);
+    memset(_overlayPixels.data(), 0, _overlayPixels.size() * sizeof(uint32_t));
+    _overlayWidth = canvasWidth;
+    _overlayHeight = canvasHeight;
+    _overlayDirtyLeft = _overlayDirtyTop = 0;
+    _overlayDirtyRight = canvasWidth;
+    _overlayDirtyBottom = canvasHeight;
+  }
+  else if (_overlayDirtyRight <= _overlayDirtyLeft)
+  {
+    _overlayDirtyLeft = x;
+    _overlayDirtyTop = y;
+    _overlayDirtyRight = x + width;
+    _overlayDirtyBottom = y + height;
   }
   else
   {
-    _overlayPixels.assign(argb, argb + (size_t)width * height);
-    _overlayX = x;
-    _overlayY = y;
-    _overlayWidth = width;
-    _overlayHeight = height;
+    _overlayDirtyLeft = std::min(_overlayDirtyLeft, x);
+    _overlayDirtyTop = std::min(_overlayDirtyTop, y);
+    _overlayDirtyRight = std::max(_overlayDirtyRight, x + width);
+    _overlayDirtyBottom = std::max(_overlayDirtyBottom, y + height);
   }
+
+  for (int row = 0; row < height; ++row)
+    memcpy(&_overlayPixels[(size_t)(y + row) * canvasWidth + x], argb + (size_t)row * stride, (size_t)width * 4);
 
   _overlayChanged = true;
 }
@@ -359,18 +383,22 @@ void Video::drawOverlay()
                                                 GL_UNSIGNED_INT_8_8_8_8_REV, GL_LINEAR);
         _overlayTextureWidth = _overlayWidth;
         _overlayTextureHeight = _overlayHeight;
+        _overlayDirtyLeft = _overlayDirtyTop = 0;
+        _overlayDirtyRight = _overlayWidth;
+        _overlayDirtyBottom = _overlayHeight;
       }
 
-      _overlayDrawX = _overlayX;
-      _overlayDrawY = _overlayY;
-
-      if (_overlayTexture != 0)
+      // only the part that changed
+      if (_overlayTexture != 0 && _overlayDirtyRight > _overlayDirtyLeft && _overlayDirtyBottom > _overlayDirtyTop)
       {
         Gl::bindTexture(GL_TEXTURE_2D, _overlayTexture);
+        Gl::pixelStorei(GL_UNPACK_ROW_LENGTH, _overlayWidth);
+        Gl::texSubImage2D(GL_TEXTURE_2D, 0, _overlayDirtyLeft, _overlayDirtyTop, _overlayDirtyRight - _overlayDirtyLeft,
+                          _overlayDirtyBottom - _overlayDirtyTop, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
+                          &_overlayPixels[(size_t)_overlayDirtyTop * _overlayWidth + _overlayDirtyLeft]);
         Gl::pixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        Gl::texSubImage2D(GL_TEXTURE_2D, 0, 0, 0, _overlayWidth, _overlayHeight, GL_BGRA,
-                          GL_UNSIGNED_INT_8_8_8_8_REV, _overlayPixels.data());
       }
+      _overlayDirtyLeft = _overlayDirtyTop = _overlayDirtyRight = _overlayDirtyBottom = 0;
     }
   }
 
@@ -390,9 +418,8 @@ void Video::drawOverlay()
     Gl::bindBuffer(GL_ARRAY_BUFFER, 0);
   }
 
-  // the quad covers the overlay's part of the window (GL counts from the bottom)
-  Gl::viewport(_overlayDrawX, (GLint)_windowHeight - _overlayDrawY - (GLint)_overlayTextureHeight,
-               _overlayTextureWidth, _overlayTextureHeight);
+  // the canvas covers the window (GL counts from the bottom)
+  Gl::viewport(0, (GLint)_windowHeight - _overlayTextureHeight, _overlayTextureWidth, _overlayTextureHeight);
   Gl::useProgram(_program);
   Gl::bindVertexArray(_overlayVertexArray);
   Gl::activeTexture(GL_TEXTURE0);

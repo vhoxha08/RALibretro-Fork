@@ -379,8 +379,9 @@ bool Application::init(const char* title, int width, int height)
 #endif
 #ifndef _WIN32
     // the toolkit's overlay is drawn over the game (on Windows, it's a window of its own)
-    RA_SetOverlayImageHandler([](const uint32_t* argb, int x, int y, int width, int height) {
-      app._video.setOverlayImage(argb, x, y, (unsigned)width, (unsigned)height);
+    RA_SetOverlayImageHandler([](const uint32_t* argb, int stride, int canvasWidth, int canvasHeight, int x, int y,
+                                 int width, int height) {
+      app._video.setOverlayImage(argb, stride, canvasWidth, canvasHeight, x, y, width, height);
     });
 #endif
     RA_Init(g_mainWindow);
