@@ -18,6 +18,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "Host.h"
+#include "HostWxInternal.h"
 
 #include "Platform.h"
 #include "resource.h"
@@ -64,34 +65,9 @@ namespace hostmac
 }
 #endif
 
-namespace
+namespace hostwx
 {
-  std::function<void(const char*)> s_textInputHandler;
-
-  class HostApp : public wxApp
-  {
-  public:
-    // RALibretro parses its own command line
-    bool OnInit() override { return true; }
-  };
-
-  host::MenuProvider* s_menuProvider = nullptr;
-  wxEventLoopBase* s_eventLoop = nullptr;
-  std::unique_ptr<wxEventLoopActivator> s_eventLoopActivator;
-
-  // the window's state, for the game thread (updated on the main thread)
-  std::atomic<int> s_clientWidth{0};
-  std::atomic<int> s_clientHeight{0};
-  std::atomic<int> s_windowX{0};
-  std::atomic<int> s_windowY{0};
-  std::atomic<bool> s_fullscreen{false};
-
-  // the context that draws to the game view
-  wxGLContext* s_viewContext = nullptr;
-
-  // ===== input as SDL events =====
-
-  Uint16 modifiers(const wxKeyboardState& state)
+  Uint16 toSdlModifiers(const wxKeyboardState& state)
   {
     Uint16 mod = 0;
     if (state.ShiftDown())
@@ -174,21 +150,56 @@ namespace
     return SDLK_UNKNOWN;
   }
 
-  void pushKeyEvent(const wxKeyEvent& event, bool pressed)
+  bool toSdlKeyEvent(const wxKeyEvent& event, bool pressed, SDL_Event* sdlEvent)
   {
     const SDL_Keycode sym = toSdlKeycode(event);
     if (sym == SDLK_UNKNOWN)
-      return;
+      return false;
 
-    SDL_Event sdlEvent = {};
-    sdlEvent.type = pressed ? SDL_KEYDOWN : SDL_KEYUP;
-    sdlEvent.key.timestamp = SDL_GetTicks();
-    sdlEvent.key.state = pressed ? SDL_PRESSED : SDL_RELEASED;
-    sdlEvent.key.repeat = event.IsAutoRepeat() ? 1 : 0;
-    sdlEvent.key.keysym.sym = sym;
-    sdlEvent.key.keysym.scancode = SDL_GetScancodeFromKey(sym);
-    sdlEvent.key.keysym.mod = modifiers(event);
-    SDL_PushEvent(&sdlEvent);
+    *sdlEvent = {};
+    sdlEvent->type = pressed ? SDL_KEYDOWN : SDL_KEYUP;
+    sdlEvent->key.timestamp = SDL_GetTicks();
+    sdlEvent->key.state = pressed ? SDL_PRESSED : SDL_RELEASED;
+    sdlEvent->key.repeat = event.IsAutoRepeat() ? 1 : 0;
+    sdlEvent->key.keysym.sym = sym;
+    sdlEvent->key.keysym.scancode = SDL_GetScancodeFromKey(sym);
+    sdlEvent->key.keysym.mod = toSdlModifiers(event);
+    return true;
+  }
+}
+
+namespace
+{
+  std::function<void(const char*)> s_textInputHandler;
+
+  class HostApp : public wxApp
+  {
+  public:
+    // RALibretro parses its own command line
+    bool OnInit() override { return true; }
+  };
+
+  host::MenuProvider* s_menuProvider = nullptr;
+  wxEventLoopBase* s_eventLoop = nullptr;
+  std::unique_ptr<wxEventLoopActivator> s_eventLoopActivator;
+
+  // the window's state, for the game thread (updated on the main thread)
+  std::atomic<int> s_clientWidth{0};
+  std::atomic<int> s_clientHeight{0};
+  std::atomic<int> s_windowX{0};
+  std::atomic<int> s_windowY{0};
+  std::atomic<bool> s_fullscreen{false};
+
+  // the context that draws to the game view
+  wxGLContext* s_viewContext = nullptr;
+
+  // ===== input as SDL events =====
+
+  void pushKeyEvent(const wxKeyEvent& event, bool pressed)
+  {
+    SDL_Event sdlEvent;
+    if (hostwx::toSdlKeyEvent(event, pressed, &sdlEvent))
+      SDL_PushEvent(&sdlEvent);
   }
 
   void pushWindowEvent(Uint8 type, int data1 = 0, int data2 = 0)
@@ -637,7 +648,7 @@ void* host::createMainWindow(const char* title, int x, int y, int width, int hei
 
   // let the window appear before the GL contexts attach to it
   pumpEvents();
-  return s_frame;
+  return static_cast<wxWindow*>(s_frame);
 }
 
 void host::destroyMainWindow()

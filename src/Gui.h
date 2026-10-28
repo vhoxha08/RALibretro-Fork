@@ -19,8 +19,8 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
-// Dear ImGui user interface for the macOS/Linux build: modal dialogs (the menu bar is native, see host/Host.h).
-// Drawn on top of the game image right before each buffer swap.
+// Dear ImGui drawing for the macOS/Linux build: the toolkit's overlay (popups, the in-game overlay), drawn on top of
+// the game image right before each buffer swap. The menu bar and the dialogs are native (host/Host.h, Dialog.h).
 #ifndef _WIN32
 
 #include <SDL.h>
@@ -33,34 +33,17 @@ namespace gui
   bool init(std::function<void(int*, int*)> getSize);
   void destroy();
 
-  // Redraws the window (game image + GUI). Used while a modal dialog runs its own loop.
-  void setRedraw(std::function<void()> redraw);
-
-  // Returns true if ImGui uses the event (i.e. typing into a field or clicking a menu), so the game ignores it.
+  // Returns true if ImGui uses the event, so the game ignores it.
   bool processEvent(const SDL_Event& event);
 
   // Text typed into the window (UTF-8). Can be called from any thread.
   void addTextInput(const char* utf8);
 
+  // Draws another component's windows (the toolkit's overlay) every frame.
+  void setToolkitRenderer(std::function<void()> renderer);
+
   // Builds and renders one GUI frame. Called with the frontend GL context current, before the swap.
   void render();
-
-  // Runs a modal window until draw returns false. draw is called between Begin/End of the window; onEvent
-  // sees every SDL event first and returns true to consume it. Returns false if the application is quitting.
-  // afterFrame runs once each frame has been drawn (outside the ImGui frame, so it may open another modal)
-  // and returns false to close the window.
-  bool runModal(const char* title, const std::function<bool()>& draw,
-                const std::function<bool(const SDL_Event&)>& onEvent = nullptr,
-                const std::function<bool()>& afterFrame = nullptr);
-  bool isModalActive();
-
-  // Draws another component's windows (the toolkit's) every frame.
-  void setToolkitRenderer(std::function<void()> renderer);
-  // Runs once per iteration of every modal loop, after the frame (i.e. the toolkit's UI thread work).
-  void setPerFrame(std::function<void()> perFrame);
-  // Blocks like runModal for a window drawn by the toolkit renderer, until isOpen returns false.
-  // Returns false if the application is quitting.
-  bool runModalLoop(const std::function<bool()>& isOpen);
 }
 
 #endif

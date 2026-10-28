@@ -44,12 +44,12 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
  typedef uint16_t WORD;
  typedef unsigned int UINT;
 
- // menu item states (the ImGui menu derives them from the application state)
+ // menu item states (the native menu derives them from the application state)
  #define MF_ENABLED  0x0000U
  #define MF_DISABLED 0x0002U
 
- // MessageBox with the subset of the Win32 API RALibretro uses, implemented with SDL message boxes.
- // On these platforms g_mainWindow holds the SDL_Window*, so it can be passed as the parent.
+ // MessageBox with the subset of the Win32 API RALibretro uses, implemented with native message boxes.
+ // On these platforms g_mainWindow is the main window (see host::createMainWindow).
  #define MB_OK          0x00000000U
  #define MB_OKCANCEL    0x00000001U
  #define MB_YESNO       0x00000004U

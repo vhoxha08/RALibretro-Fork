@@ -26,7 +26,6 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Application.h"
 #include "Emulator.h"
-#include "Gui.h"
 #include "Util.h"
 #include "resource.h"
 
@@ -89,8 +88,7 @@ static std::string stripAccelerator(const std::string& caption)
 
 void Application::menuItem(host::MenuSink& sink, const std::string& label, unsigned id, bool enabled, bool checked)
 {
-  // like the Win32 menu, which can't be used while a dialog is open
-  sink.item(label, id, enabled && isMenuCommandEnabled(id) && !gui::isModalActive(), checked);
+  sink.item(label, id, enabled && isMenuCommandEnabled(id), checked);
 }
 
 namespace

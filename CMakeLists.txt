@@ -97,7 +97,7 @@ add_executable(RALibretro
   src/CdRom.cpp
   src/components/Audio.cpp
   src/components/Config.cpp
-  src/components/DialogImGui.cpp
+  src/components/DialogWx.cpp
   src/components/Input.cpp
   src/components/Logger.cpp
   src/components/Microphone.cpp

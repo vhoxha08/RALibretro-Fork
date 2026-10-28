@@ -33,29 +33,13 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace
 {
-  struct Modal
-  {
-    std::string title;
-    const std::function<bool()>* draw;
-    bool open;
-  };
-
   bool s_initialized = false;
   std::function<void(int*, int*)> s_getSize;
   // text typed into the window comes from the main thread
   std::mutex s_textInputMutex;
   std::string s_textInput;
   Uint64 s_lastFrameTime = 0;
-  std::function<void()> s_redraw;
-  std::vector<Modal*> s_modals;
-  int s_externalModals = 0; // modal windows drawn by someone else (the toolkit), see runModalLoop
   std::function<void()> s_toolkitRenderer;
-  std::function<void()> s_perFrame;
-
-  bool anyModalActive()
-  {
-    return !s_modals.empty() || s_externalModals > 0;
-  }
 
   ImGuiKey toImGuiKey(SDL_Keycode key)
   {
@@ -170,45 +154,6 @@ namespace
         break;
     }
   }
-
-  // Pumps events and redraws until isOpen returns false or the application is asked to quit.
-  // Returns false if quitting (the quit request is put back for the main loop).
-  bool modalLoop(const std::function<bool()>& isOpen, const std::function<bool(const SDL_Event&)>& onEvent,
-                 const std::function<bool()>& afterFrame)
-  {
-    while (isOpen())
-    {
-      // the main thread pumps SDL's events
-      SDL_Event event;
-      while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT) > 0)
-      {
-        if (event.type == SDL_QUIT)
-        {
-          SDL_PushEvent(&event);
-          return false;
-        }
-
-        if (onEvent && onEvent(event))
-          continue;
-
-        gui::processEvent(event);
-      }
-
-      if (s_redraw)
-        s_redraw();
-
-      // work queued during the frame (i.e. by the toolkit's windows) runs outside of it
-      if (s_perFrame)
-        s_perFrame();
-
-      if (afterFrame && isOpen() && !afterFrame())
-        break;
-
-      SDL_Delay(16);
-    }
-
-    return true;
-  }
 }
 
 bool gui::init(std::function<void(int*, int*)> getSize)
@@ -262,11 +207,6 @@ void gui::destroy()
   s_initialized = false;
 }
 
-void gui::setRedraw(std::function<void()> redraw)
-{
-  s_redraw = std::move(redraw);
-}
-
 bool gui::processEvent(const SDL_Event& event)
 {
   if (!s_initialized)
@@ -280,13 +220,13 @@ bool gui::processEvent(const SDL_Event& event)
     case SDL_KEYDOWN:
     case SDL_KEYUP:
     case SDL_TEXTINPUT:
-      return io.WantCaptureKeyboard || anyModalActive();
+      return io.WantCaptureKeyboard;
 
     case SDL_MOUSEMOTION:
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP:
     case SDL_MOUSEWHEEL:
-      return io.WantCaptureMouse || anyModalActive();
+      return io.WantCaptureMouse;
 
     default:
       return false;
@@ -299,34 +239,9 @@ void gui::addTextInput(const char* utf8)
   s_textInput += utf8;
 }
 
-bool gui::isModalActive()
-{
-  return anyModalActive();
-}
-
 void gui::setToolkitRenderer(std::function<void()> renderer)
 {
   s_toolkitRenderer = std::move(renderer);
-}
-
-void gui::setPerFrame(std::function<void()> perFrame)
-{
-  s_perFrame = std::move(perFrame);
-}
-
-bool gui::runModalLoop(const std::function<bool()>& isOpen)
-{
-  if (!s_initialized)
-    return true;
-
-  ++s_externalModals;
-  const bool result = modalLoop(isOpen, nullptr, nullptr);
-  --s_externalModals;
-
-  if (s_redraw)
-    s_redraw();
-
-  return result;
 }
 
 void gui::render()
@@ -360,65 +275,15 @@ void gui::render()
   ImGui_ImplOpenGL3_NewFrame();
   ImGui::NewFrame();
 
-  // the toolkit's windows (login, message boxes, ...)
+  // the toolkit's overlay
   if (s_toolkitRenderer)
     s_toolkitRenderer();
-
-  // only the innermost modal is interactive; it is drawn last so it is on top
-  for (size_t i = 0; i < s_modals.size(); ++i)
-  {
-    Modal* modal = s_modals[i];
-    const bool interactive = (i + 1 == s_modals.size());
-
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetWorkCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    // on Windows dialogs are separate windows; here they must fit in the main window, so large ones scroll
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(viewport->WorkSize.x, viewport->WorkSize.y));
-    ImGui::BeginDisabled(!interactive);
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse |
-                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_HorizontalScrollbar;
-    bool open = true;
-    if (ImGui::Begin(modal->title.c_str(), interactive ? &open : nullptr, flags))
-    {
-      if (interactive && ImGui::IsWindowAppearing())
-        ImGui::SetWindowFocus();
-
-      if (!(*modal->draw)())
-        modal->open = false;
-    }
-    ImGui::End();
-    ImGui::EndDisabled();
-
-    if (!open)
-      modal->open = false;
-  }
 
   ImGui::Render();
 
   // the game image may have changed the viewport and blending state
   glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-}
-
-bool gui::runModal(const char* title, const std::function<bool()>& draw,
-                   const std::function<bool(const SDL_Event&)>& onEvent,
-                   const std::function<bool()>& afterFrame)
-{
-  if (!s_initialized)
-    return true;
-
-  Modal modal{title, &draw, true};
-  s_modals.push_back(&modal);
-
-  const bool notQuitting = modalLoop([&modal]() { return modal.open; }, onEvent, afterFrame);
-
-  s_modals.pop_back();
-
-  // draw once more so the closed dialog disappears immediately
-  if (s_redraw)
-    s_redraw();
-
-  return notQuitting;
 }
 
 #endif

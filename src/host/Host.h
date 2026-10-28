@@ -59,7 +59,8 @@ namespace host
   // ===== main window =====
 
   // Creates and shows the main window, with a client area (the game view) of width x height. x and y are the
-  // window position, or INT_MIN to center it. Returns the native window (the HWND passed to the toolkit).
+  // window position, or INT_MIN to center it. Returns the native window (the HWND passed to the toolkit), a
+  // wxWindow*.
   void* createMainWindow(const char* title, int x, int y, int width, int height);
   void destroyMainWindow();
 

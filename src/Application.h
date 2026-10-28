@@ -235,7 +235,7 @@ protected:
 
   bool isGameThread() const { return std::this_thread::get_id() == _gameThreadId; }
   // Runs fn on the game thread and waits for it, but at most timeout. Returns false if fn didn't run (it never
-  // will). Also served while a modal dialog runs its own loop, unlike postToGameThread's work.
+  // will). Served before postToGameThread's work.
   bool queryGameThread(const std::function<void()>& fn, std::chrono::milliseconds timeout);
   void runGameQueries();
 

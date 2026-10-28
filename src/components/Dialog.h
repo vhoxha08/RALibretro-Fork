@@ -29,10 +29,13 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef _WIN32
 
-// Same API as the Win32 Dialog below. The controls are recorded and shown as a modal ImGui window
-// (DialogImGui.cpp). Subclasses customize behavior through the hooks below instead of a Win32 dialogProc.
+// Same API as the Win32 Dialog below. The controls are recorded and shown as a native modal dialog
+// (DialogWx.cpp). Subclasses customize behavior through the hooks below instead of a Win32 dialogProc; they run
+// on the main thread while the game thread waits for the dialog.
 class Dialog
 {
+  friend class DialogWindow;
+
 public:
   typedef const char* (*GetOption)(int index, void* udata);
 
@@ -47,7 +50,7 @@ public:
   void addCombobox(DWORD id, WORD x, WORD y, WORD w, WORD h, WORD maxDropDownHeight, GetOption get_option, void* udata, int* selected);
   void addEditbox(DWORD id, WORD x, WORD y, WORD w, WORD h, WORD lines, char* contents, size_t maxSize, bool readOnly);
 
-  // Runs the dialog modally. Returns true if OK was pressed and a checkbox or combobox changed.
+  // Runs the dialog modally (from any thread). Returns true if OK was pressed and a checkbox or combobox changed.
   bool show();
 
 protected:
@@ -99,14 +102,12 @@ protected:
   virtual bool onButton(DWORD id) { (void)id; return false; }
   // called when the user picks a different item in a combobox
   virtual void onSelectionChanged(DWORD id) { (void)id; }
-  // called for each SDL event while the dialog is open; return true to consume it
+  // called for each key pressed or released while the dialog is open (before the controls get it); return true
+  // to consume it
   virtual bool onEvent(const union SDL_Event& event) { (void)event; return false; }
-  // called once per frame while the dialog is open
+  // called about 60 times per second while the dialog is open
   virtual void onFrame() {}
   virtual void markClosed() {}
-
-  void render();
-  bool processPendingInput();
 
   std::string _title;
   WORD _width = 0;
@@ -115,8 +116,6 @@ protected:
   bool _updated = false;
   bool _closed = false;
   DWORD _result = 0;
-  DWORD _pendingClick = 0;  // handled after the GUI frame (it may open another dialog)
-  DWORD _pendingChange = 0;
 };
 
 #else
