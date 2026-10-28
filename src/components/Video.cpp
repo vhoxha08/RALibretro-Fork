@@ -141,6 +141,18 @@ void Video::destroy()
     _vertexBuffer = 0;
   }
 
+  if (_overlayTexture != 0)
+  {
+    Gl::deleteTextures(1, &_overlayTexture);
+    _overlayTexture = 0;
+  }
+
+  if (_overlayVertexArray != 0)
+  {
+    Gl::deleteVertexArrays(1, &_overlayVertexArray);
+    _overlayVertexArray = 0;
+  }
+
   if (_indentityVertexBuffer != 0)
   {
     Gl::deleteBuffers(1, &_indentityVertexBuffer);
@@ -199,6 +211,24 @@ void Video::redraw()
 
 void Video::draw(bool force)
 {
+  if (_texture == 0)
+  {
+    // no game image yet, but the toolkit's overlay (i.e. the welcome popup) is shown over the black window
+    if (_overlayTexture != 0 || _overlayChanged)
+    {
+      Gl::bindFramebuffer(GL_FRAMEBUFFER, 0);
+      Gl::viewport(0, 0, _windowWidth, _windowHeight);
+      Gl::clearColor(0.0, 0.0, 0.0, 1.0);
+      Gl::clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      drawOverlay();
+      Gl::bindTexture(GL_TEXTURE_2D, 0);
+      Gl::bindVertexArray(0);
+      Gl::useProgram(0);
+      _ctx->swapBuffers();
+    }
+    return;
+  }
+
   if (_texture != 0 && (force || _enabled))
   {
     Gl::bindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -275,12 +305,98 @@ void Video::draw(bool force)
       Gl::bindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
+    drawOverlay();
+
     Gl::bindTexture(GL_TEXTURE_2D, 0);
     Gl::bindVertexArray(0);
     Gl::useProgram(0);
 
     _ctx->swapBuffers();
   }
+}
+
+void Video::setOverlayImage(const uint32_t* argb, unsigned width, unsigned height)
+{
+  std::lock_guard<std::mutex> lock(_overlayMutex);
+  if (argb == nullptr || width == 0 || height == 0)
+  {
+    _overlayPixels.clear();
+    _overlayWidth = _overlayHeight = 0;
+  }
+  else
+  {
+    _overlayPixels.assign(argb, argb + (size_t)width * height);
+    _overlayWidth = width;
+    _overlayHeight = height;
+  }
+
+  _overlayChanged = true;
+}
+
+void Video::drawOverlay()
+{
+  if (_overlayChanged.exchange(false))
+  {
+    std::lock_guard<std::mutex> lock(_overlayMutex);
+    if (_overlayPixels.empty())
+    {
+      if (_overlayTexture != 0)
+      {
+        Gl::deleteTextures(1, &_overlayTexture);
+        _overlayTexture = 0;
+      }
+    }
+    else
+    {
+      if (_overlayTexture == 0 || _overlayTextureWidth != _overlayWidth || _overlayTextureHeight != _overlayHeight)
+      {
+        if (_overlayTexture != 0)
+          Gl::deleteTextures(1, &_overlayTexture);
+
+        _overlayTexture = GlUtil::createTexture(_overlayWidth, _overlayHeight, GL_RGBA, GL_BGRA,
+                                                GL_UNSIGNED_INT_8_8_8_8_REV, GL_LINEAR);
+        _overlayTextureWidth = _overlayWidth;
+        _overlayTextureHeight = _overlayHeight;
+      }
+
+      if (_overlayTexture != 0)
+      {
+        Gl::bindTexture(GL_TEXTURE_2D, _overlayTexture);
+        Gl::pixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        Gl::texSubImage2D(GL_TEXTURE_2D, 0, 0, 0, _overlayWidth, _overlayHeight, GL_BGRA,
+                          GL_UNSIGNED_INT_8_8_8_8_REV, _overlayPixels.data());
+      }
+    }
+  }
+
+  if (_overlayTexture == 0)
+    return;
+
+  // a quad over the whole window (its own vertex array: the game's may not exist yet)
+  if (_overlayVertexArray == 0)
+  {
+    Gl::genVertexArray(1, &_overlayVertexArray);
+    Gl::bindVertexArray(_overlayVertexArray);
+    Gl::bindBuffer(GL_ARRAY_BUFFER, _indentityVertexBuffer);
+    Gl::enableVertexAttribArray(_posAttribute);
+    Gl::vertexAttribPointer(_posAttribute, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (const GLvoid*)offsetof(VertexData, x));
+    Gl::enableVertexAttribArray(_uvAttribute);
+    Gl::vertexAttribPointer(_uvAttribute, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (const GLvoid*)offsetof(VertexData, u));
+    Gl::bindBuffer(GL_ARRAY_BUFFER, 0);
+  }
+
+  Gl::viewport(0, 0, _windowWidth, _windowHeight);
+  Gl::useProgram(_program);
+  Gl::bindVertexArray(_overlayVertexArray);
+  Gl::activeTexture(GL_TEXTURE0);
+  Gl::bindTexture(GL_TEXTURE_2D, _overlayTexture);
+  Gl::uniform1i(_texUniform, 0);
+
+  // premultiplied alpha
+  Gl::enable(GL_BLEND);
+  Gl::blendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  Gl::drawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  Gl::disable(GL_BLEND);
 }
 
 bool Video::setGeometry(unsigned width, unsigned height, unsigned maxWidth, unsigned maxHeight, float aspect, enum retro_pixel_format pixelFormat, const struct retro_hw_render_callback* hwRenderCallback)

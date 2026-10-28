@@ -136,6 +136,11 @@ void RA_SetAudioHandlers(void (*playFile)(const char*), void (*beep)(void))
         _RA_SetAudioHandlers(playFile, beep);
 }
 
+void RA_SetOverlayImageHandler(void (*handleImage)(const uint32_t*, int, int))
+{
+    _RA_SetOverlayImageHandler(handleImage);
+}
+
 void RA_SetFileDialogHandler(int (*showFileDialog)(int, const char*, const char*, const char*, const char*, char*, int))
 {
     _RA_SetFileDialogHandler(showFileDialog);

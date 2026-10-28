@@ -377,6 +377,12 @@ bool Application::init(const char* title, int width, int height)
     // keep RACache next to the other RALibretro folders, like the Windows build
     RA_SetBaseDirectory(_config.getRootFolder());
 #endif
+#ifndef _WIN32
+    // the toolkit's overlay is drawn over the game (on Windows, it's a window of its own)
+    RA_SetOverlayImageHandler([](const uint32_t* argb, int width, int height) {
+      app._video.setOverlayImage(argb, (unsigned)width, (unsigned)height);
+    });
+#endif
     RA_Init(g_mainWindow);
 #ifndef _WIN32
     installHostServices();
@@ -842,6 +848,11 @@ void Application::run()
             // no more on-screen messages, force repaint to clear the popups
             if (!_video.hasMessage())
               _video.redraw();
+          }
+          // the toolkit's overlay changed (i.e. the in-game overlay, which pauses the game)
+          else if (_video.hasOverlayChanged())
+          {
+            _video.redraw();
           }
           break;
 

@@ -19,6 +19,9 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <vector>
+#include <mutex>
+#include <atomic>
 #include "libretro/Components.h"
 #include "Config.h"
 #include "Gl.h"
@@ -50,6 +53,11 @@ public:
 
   virtual void showMessage(const char* msg, unsigned frames) override;
   bool hasMessage() const { return _numMessages != 0; }
+
+  // The toolkit's overlay, drawn over the game: premultiplied ARGB pixels (rows from top to bottom) the size of the
+  // window, or none (nullptr). Can be called from any thread; it's drawn with the next frame.
+  void setOverlayImage(const uint32_t* argb, unsigned width, unsigned height);
+  bool hasOverlayChanged() const { return _overlayChanged; }
 
   virtual void showSpeedIndicator(Speed visibleIndicator) override;
 
@@ -113,6 +121,17 @@ protected:
 
   unsigned                _windowWidth;
   unsigned                _osdScale = 1;
+
+  void drawOverlay();
+  std::mutex              _overlayMutex;
+  std::vector<uint32_t>   _overlayPixels;
+  unsigned                _overlayWidth = 0;
+  unsigned                _overlayHeight = 0;
+  std::atomic<bool>       _overlayChanged{false};
+  GLuint                  _overlayTexture = 0;
+  GLuint                  _overlayVertexArray = 0;
+  unsigned                _overlayTextureWidth = 0;
+  unsigned                _overlayTextureHeight = 0;
   unsigned                _windowHeight;
   unsigned                _textureWidth;
   unsigned                _textureHeight;
