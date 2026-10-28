@@ -7,6 +7,58 @@ The "multi-emulation" feature is only possible because it uses [libretro](https:
 The integration with RetroAchievements.org site is done by the [RAIntegration](https://github.com/RetroAchievements/RAIntegration).
 
 
+## macOS (`cross-platform` branch)
+
+This branch runs RALibretro natively on macOS (Apple Silicon). The Windows build is unchanged.
+
+- Native window, menu bar and dialogs (wxWidgets), and the RetroAchievements toolkit's windows (Memory Inspector,
+  Achievement Editor, ...) as native windows too.
+- The game runs on its own thread: menus, resizing and the toolkit's windows don't stop it.
+- The toolkit's overlay (popups, scoreboards, the in-game overlay) is drawn over the game, at the display's resolution.
+- [RAIntegration](https://github.com/vhoxha08/RAIntegration/tree/cross-platform) is linked into the application
+  (it's a submodule, `src/RAIntegration`) instead of being loaded from `RA_Integration.dll`.
+
+### Requirements
+
+- macOS 11 or later on Apple Silicon, with the Xcode command line tools (`xcode-select --install`)
+- [Homebrew](https://brew.sh): `brew install cmake ninja sdl2-compat`
+
+### Building
+
+```
+git clone --recursive -b cross-platform https://github.com/vhoxha08/RALibretro.git
+cd RALibretro
+cmake -B build-release.noindex -G Ninja -DCMAKE_BUILD_TYPE=Release
+ninja -C build-release.noindex RALibretro
+```
+
+The result is a self-contained `build-release.noindex/RALibretro.app` (SDL is copied into it): copy it to
+`/Applications`. It's signed ad hoc, so on another Mac it has to be opened with right-click → Open the first time.
+The first build takes a while (it builds wxWidgets).
+
+(A build folder named `*.noindex` keeps Spotlight, and the Apps view, from listing the application built in it.)
+
+### Where the data goes
+
+- `~/Library/Application Support/RALibretro`: cores, settings, saves, screenshots, system files (BIOS) and the
+  toolkit's data (`RACache`, the login). The application installs its cores list and overlay files there.
+- *Portable*: when a `Cores` folder is next to the application (or next to the executable, i.e. in a build folder),
+  that folder is used instead, like the Windows version.
+
+Cores are downloaded with *Settings → Manage Cores*.
+
+### Working on RAIntegration at the same time
+
+CMake uses the submodule; without it, a RAIntegration checkout next to this one (`../RAIntegration`). Another one can
+be picked with `-DRA_INTEGRATION_DIR=/path/to/RAIntegration` (it needs its submodules:
+`git submodule update --init --recursive`). To build with a newer RAIntegration:
+
+```
+git submodule update --remote src/RAIntegration
+git add src/RAIntegration && git commit -m "Update RAIntegration"
+```
+
+
 ## Building RALibretro with MSYS2/Makefile
 
 ### Install MSYS2
