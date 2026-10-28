@@ -22,10 +22,8 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef _WIN32
 
 #include <SDL.h>
-#include <SDL_opengl.h>
 
 #include "host/Host.h"
-#include "stb_image.h"
 
 #include <nfd.h>
 
@@ -103,58 +101,6 @@ static void playSound(const char* utf8Path)
   SDL_FreeWAV(wavData);
 }
 
-// Textures for the toolkit's images (badges, overlay), created with the frontend GL context current.
-// The ImGui OpenGL renderer uses the texture name as its ImTextureID.
-static uintptr_t createTexture(const void* pixels, int width, int height, GLenum format, GLenum type)
-{
-  GLint previous = 0;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous);
-
-  GLuint texture = 0;
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, format, type, pixels);
-  glBindTexture(GL_TEXTURE_2D, previous);
-
-  // don't leave an error behind for RALibretro's GL wrapper to find
-  if (glGetError() != GL_NO_ERROR)
-  {
-    glDeleteTextures(1, &texture);
-    return 0;
-  }
-
-  return texture;
-}
-
-static uintptr_t createTextureFromFile(const char* utf8Path, int* width, int* height)
-{
-  int channels = 0;
-  unsigned char* rgba = stbi_load(utf8Path, width, height, &channels, 4);
-  if (rgba == nullptr)
-    return 0;
-
-  const uintptr_t texture = createTexture(rgba, *width, *height, GL_RGBA, GL_UNSIGNED_BYTE);
-  stbi_image_free(rgba);
-  return texture;
-}
-
-static uintptr_t createTextureFromPixels(const uint32_t* argb, int width, int height)
-{
-  // 0xAARRGGBB words are B,G,R,A bytes in memory on little endian machines
-  return createTexture(argb, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV);
-}
-
-static void destroyTexture(uintptr_t texture)
-{
-  const GLuint name = static_cast<GLuint>(texture);
-  glDeleteTextures(1, &name);
-}
-
 static int showFileDialog(int mode, const char*, const char* filters, const char* defaultPath,
                           const char* defaultName, char* result, int resultSize)
 {
@@ -217,7 +163,6 @@ void installHostServices()
 {
   RA_SetClipboardHandlers(setClipboardText, getClipboardText);
   RA_SetAudioHandlers(playSound, nullptr);
-  RA_SetTextureHandlers(createTextureFromFile, createTextureFromPixels, destroyTexture);
   RA_SetFileDialogHandler(showFileDialog);
 }
 

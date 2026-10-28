@@ -37,17 +37,6 @@ void RA_SetClipboardHandlers(void (*setText)(const char* utf8Text), const char* 
 // Sound playback. playFile receives the absolute path of a .wav file.
 void RA_SetAudioHandlers(void (*playFile)(const char* utf8Path), void (*beep)(void));
 
-// Draws the toolkit's windows; call inside the Dear ImGui frame.
-void RA_RenderImGui(void);
-
-// How the toolkit's modal windows block: runModalLoop must pump events and redraw until isOpen(data) returns 0.
-void RA_SetModalLoopHandler(void (*runModalLoop)(int (*isOpen)(void*), void* data));
-
-// Textures for the toolkit's images: ImTextureIDs of the host's ImGui renderer (0 = failure). Pixels are ARGB.
-void RA_SetTextureHandlers(uintptr_t (*createFromFile)(const char* utf8Path, int* width, int* height),
-                           uintptr_t (*createFromPixels)(const uint32_t* argb, int width, int height),
-                           void (*destroy)(uintptr_t texture));
-
 // The platform's file dialog. mode: 1 = open, 2 = save, 3 = select folder. filters is a list of "Description\tspec\n"
 // entries (spec = "ext1,ext2"). Writes the chosen UTF-8 path to result and returns non-zero, or 0 if canceled.
 void RA_SetFileDialogHandler(int (*showFileDialog)(int mode, const char* title, const char* filters,

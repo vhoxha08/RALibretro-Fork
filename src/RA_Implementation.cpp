@@ -80,7 +80,7 @@ void RebuildMenu()
   InvalidateRect(g_mainWindow, NULL, TRUE);
   DrawMenuBar(g_mainWindow);
 #else
-  // the ImGui menu bar asks the integration for its items every time it is drawn
+  // the native menu asks the integration for its items every time it opens (MenuNative.cpp)
 #endif
 }
 

@@ -14,9 +14,6 @@
 	path = src/libchdr
 	url = https://github.com/rtissera/libchdr.git
 	ignore = untracked
-[submodule "src/imgui"]
-	path = src/imgui
-	url = https://github.com/ocornut/imgui.git
 [submodule "src/nfd"]
 	path = src/nfd
 	url = https://github.com/btzy/nativefiledialog-extended.git

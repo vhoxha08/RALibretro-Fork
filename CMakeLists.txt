@@ -13,21 +13,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 
-# ---- Dear ImGui (the toolkit's overlay outside Windows) --------------------------------------------
-# defined before RAIntegration, which draws its overlay with this target
-set(IMGUI_DIR src/imgui)
-add_library(imgui STATIC
-  ${IMGUI_DIR}/imgui.cpp
-  ${IMGUI_DIR}/imgui_draw.cpp
-  ${IMGUI_DIR}/imgui_tables.cpp
-  ${IMGUI_DIR}/imgui_widgets.cpp
-  ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
-)
-target_include_directories(imgui PUBLIC ${IMGUI_DIR})
-if(APPLE)
-  target_compile_definitions(imgui PRIVATE GL_SILENCE_DEPRECATION)
-endif()
-
 # ---- RAIntegration (linked statically instead of loading RA_Integration.dll) ---------------
 set(RA_INTEGRATION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../RAIntegration" CACHE PATH "RAIntegration checkout")
 if(NOT EXISTS "${RA_INTEGRATION_DIR}/CMakeLists.txt")
@@ -103,7 +88,6 @@ add_executable(RALibretro
   src/dynlib/dynlib.c
   src/Emulator.cpp
   src/Fsm.cpp
-  src/Gui.cpp
   src/Gl.cpp
   src/GlUtil.cpp
   src/Hash.cpp
@@ -137,7 +121,7 @@ target_include_directories(RALibretro BEFORE PRIVATE
 )
 target_compile_definitions(RALibretro PRIVATE
   OUTSIDE_SPEEX RANDOM_PREFIX=speex EXPORT= FIXED_POINT HAVE_CHD LOG_TO_FILE)
-target_link_libraries(RALibretro PRIVATE RAIntegrationWx wx::gl wx::core wx::base chdr imgui nfd SDL2::SDL2 OpenGL::GL
+target_link_libraries(RALibretro PRIVATE RAIntegrationWx wx::gl wx::core wx::base chdr nfd SDL2::SDL2 OpenGL::GL
   ${CMAKE_DL_LIBS})
 
 if(APPLE)

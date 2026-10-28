@@ -54,7 +54,6 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "Platform.h"
 #include "RA_Interface_Host.h"
-#include "Gui.h"
 
 #include <condition_variable>
 
@@ -344,16 +343,6 @@ bool Application::init(const char* title, int width, int height)
   inited = kVideoInited;
 
 #ifndef _WIN32
-  // the frontend GL context is current after _videoContext.init
-  if (!gui::init([](int* width, int* height) { host::getClientSize(width, height); }, host::getContentScale))
-  {
-    _logger.error(TAG "Failed to initialize the GUI");
-    goto error;
-  }
-
-  host::setTextInputHandler(gui::addTextInput);
-  _video.setOverlayRenderer(gui::render);
-
   // the Win32 build learns the initial size from the resize caused by attaching its menu; there is no such
   // event here, so tell the video component now (the menu bar is outside of the game view)
   {
@@ -383,9 +372,6 @@ bool Application::init(const char* title, int width, int height)
 #ifndef _WIN32
     // keep RACache next to the other RALibretro folders, like the Windows build
     RA_SetBaseDirectory(_config.getRootFolder());
-
-    // the toolkit's overlay is drawn with the GUI (its windows are native)
-    gui::setToolkitRenderer([]() { RA_RenderImGui(); });
 #endif
     RA_Init(g_mainWindow);
 #ifndef _WIN32
@@ -462,12 +448,6 @@ void Application::processEvents()
 
   do
   {
-#ifndef _WIN32
-    // input the GUI uses (an open menu, a text field) does not reach the game
-    if (gui::processEvent(event))
-      continue;
-
-#endif
     switch (event.type)
     {
       case SDL_QUIT:
@@ -849,7 +829,6 @@ void Application::run()
           // do no frames
           Sleep(1000 / 60); // assume 60fps
 
-#ifdef _WIN32
           // if a message is on-screen, force repaint to advance the message animation
           if (_video.hasMessage())
           {
@@ -859,10 +838,6 @@ void Application::run()
             if (!_video.hasMessage())
               _video.redraw();
           }
-#else
-          // also repaints the GUI (menu, dialogs) and advances on-screen messages
-          _video.redraw();
-#endif
           break;
 
         case Fsm::State::FrameStep:
@@ -991,10 +966,6 @@ void Application::destroy()
   if (_gameData)
     free(_gameData);
 
-#ifndef _WIN32
-  _video.setOverlayRenderer(nullptr);
-  gui::destroy();
-#endif
   _video.destroy();
   _keybinds.destroy();
   _input.destroy();

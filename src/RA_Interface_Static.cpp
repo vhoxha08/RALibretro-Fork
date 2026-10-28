@@ -136,24 +136,6 @@ void RA_SetAudioHandlers(void (*playFile)(const char*), void (*beep)(void))
         _RA_SetAudioHandlers(playFile, beep);
 }
 
-void RA_RenderImGui(void)
-{
-    if (g_bInitialized)
-        _RA_RenderImGui();
-}
-
-void RA_SetModalLoopHandler(void (*runModalLoop)(int (*isOpen)(void*), void* data))
-{
-    _RA_SetModalLoopHandler(runModalLoop);
-}
-
-void RA_SetTextureHandlers(uintptr_t (*createFromFile)(const char*, int*, int*),
-                           uintptr_t (*createFromPixels)(const uint32_t*, int, int),
-                           void (*destroy)(uintptr_t))
-{
-    _RA_SetTextureHandlers(createFromFile, createFromPixels, destroy);
-}
-
 void RA_SetFileDialogHandler(int (*showFileDialog)(int, const char*, const char*, const char*, const char*, char*, int))
 {
     _RA_SetFileDialogHandler(showFileDialog);

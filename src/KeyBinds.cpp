@@ -1694,8 +1694,8 @@ protected:
 
 #else // !_WIN32
 
-// ImGui version of the "press a key or button" dialog: keys arrive as SDL events while the dialog runs its
-// own loop, controllers are polled like the Win32 version's timer does.
+// Native (DialogWx.cpp) version of the "press a key or button" dialog: keys reach the dialog as SDL events before its
+// controls, controllers are polled like the Win32 version's timer does.
 class ChangeInputDialog : public Dialog
 {
 public:

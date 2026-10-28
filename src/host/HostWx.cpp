@@ -173,8 +173,6 @@ namespace hostwx
 
 namespace
 {
-  std::function<void(const char*)> s_textInputHandler;
-
   class HostApp : public wxApp
   {
   public:
@@ -234,19 +232,9 @@ namespace
       hostmac::prepareGLView(GetHandle());
 #endif
 
-      Bind(wxEVT_KEY_DOWN, [](wxKeyEvent& event) {
-        pushKeyEvent(event, true);
-        event.Skip(); // generates the wxEVT_CHAR for text input
-      });
+      // the game takes the keys as they are (no text input), so they don't go on to become characters
+      Bind(wxEVT_KEY_DOWN, [](wxKeyEvent& event) { pushKeyEvent(event, true); });
       Bind(wxEVT_KEY_UP, [](wxKeyEvent& event) { pushKeyEvent(event, false); });
-      Bind(wxEVT_CHAR, [](wxKeyEvent& event) {
-        const wxChar c = event.GetUnicodeKey();
-        if (c >= 32 && c != 127 && !event.RawControlDown() && !event.CmdDown())
-        {
-          if (s_textInputHandler)
-            s_textInputHandler(wxString(c).utf8_str().data());
-        }
-      });
 
       Bind(wxEVT_MOTION, &GameCanvas::onMouseMove, this);
       for (const auto type : {wxEVT_LEFT_DOWN, wxEVT_LEFT_DCLICK, wxEVT_MIDDLE_DOWN, wxEVT_MIDDLE_DCLICK,
@@ -581,7 +569,7 @@ namespace
     static bool s_initialized = false;
     if (!s_initialized)
     {
-      // the frontend's shaders (and ImGui's) are "#version 150": OpenGL 3.2 core
+      // the frontend's shaders are "#version 150": OpenGL 3.2 core
       s_attributes.PlatformDefaults().CoreProfile().OGLVersion(3, 2).EndList();
       s_initialized = true;
     }
@@ -621,11 +609,6 @@ void host::shutdown()
     wxTheApp->OnExit();
     wxEntryCleanup();
   }
-}
-
-void host::setTextInputHandler(std::function<void(const char*)> handler)
-{
-  s_textInputHandler = std::move(handler);
 }
 
 void host::pumpEvents()
