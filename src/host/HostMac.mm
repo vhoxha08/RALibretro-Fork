@@ -62,15 +62,23 @@ namespace hostmac
     CGLUnlockContext([context CGLContextObj]);
   }
 
+  // Drawing on another thread than the main one: the context is locked while it draws, as AppKit updates it on the
+  // main thread when the view changes (see updateContext), which mustn't happen in the middle of a frame.
+  void lockContext(void* glContext)
+  {
+    CGLLockContext([(__bridge NSOpenGLContext*)glContext CGLContextObj]);
+  }
+
+  void unlockContext(void* glContext)
+  {
+    CGLUnlockContext([(__bridge NSOpenGLContext*)glContext CGLContextObj]);
+  }
+
   void flushCurrent()
   {
     CGLContextObj context = CGLGetCurrentContext();
     if (context)
-    {
-      CGLLockContext(context);
       CGLFlushDrawable(context);
-      CGLUnlockContext(context);
-    }
   }
 
   // ===== relative mouse =====

@@ -58,6 +58,8 @@ namespace hostmac
   void makeCurrent(void* glContext);
   void clearCurrent();
   void updateContext(void* glContext);
+  void lockContext(void* glContext);
+  void unlockContext(void* glContext);
   void flushCurrent();
   void centerMouse(void* nsView);
   void startRelativeMouse(void* nsView, void (*onMotion)(double dx, double dy));
@@ -197,8 +199,9 @@ namespace
   bool s_mouseCaptureWanted = false;
   std::atomic<bool> s_mouseCaptured{false};
 
-  // the context that draws to the game view
+  // the context that draws to the game view, and whether this thread (the game's) holds its lock
   wxGLContext* s_viewContext = nullptr;
+  thread_local bool s_viewContextLocked = false;
 
   // ===== input as SDL events =====
 
@@ -913,6 +916,19 @@ void host::makeGLContextCurrent(void* context)
   // attaching a context to the view is main thread only; the game thread uses the contexts attached during init
   if (!wxIsMainThread())
   {
+    // the view's context is locked while it's current (it draws the frame), so the main thread doesn't update it
+    // in the middle of one (hostmac::updateContext); the core's context doesn't draw to the view
+    if (s_viewContextLocked && context != s_viewContext)
+    {
+      hostmac::unlockContext(s_viewContext->GetWXGLContext());
+      s_viewContextLocked = false;
+    }
+    else if (!s_viewContextLocked && context == s_viewContext)
+    {
+      hostmac::lockContext(s_viewContext->GetWXGLContext());
+      s_viewContextLocked = true;
+    }
+
     hostmac::makeCurrent(static_cast<wxGLContext*>(context)->GetWXGLContext());
     return;
   }
@@ -924,6 +940,11 @@ void host::makeGLContextCurrent(void* context)
 void host::releaseGLContext()
 {
 #ifdef __APPLE__
+  if (s_viewContextLocked)
+  {
+    hostmac::unlockContext(s_viewContext->GetWXGLContext());
+    s_viewContextLocked = false;
+  }
   hostmac::clearCurrent();
 #endif
 }

@@ -664,7 +664,8 @@ bool Application::runThreaded(int argc, char* argv[])
   bool ok = false;
   std::function<void()> game = [this, argc, argv, &ok]() {
     _gameThreadId = std::this_thread::get_id();
-    _videoContext.enableCoreContext(false);
+    // like between frames: the video component makes the view's context current to draw (see host::makeGLContextCurrent)
+    _videoContext.enableCoreContext(true);
 
     ok = handleArgs(argc, argv);
     if (ok)
