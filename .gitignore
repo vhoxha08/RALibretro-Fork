@@ -17,5 +17,4 @@
 .vscode
 
 # CMake build tree
-/build/
-/build-*/
+/build*/
