@@ -14,9 +14,19 @@ find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 
 # ---- RAIntegration (linked statically instead of loading RA_Integration.dll) ---------------
-set(RA_INTEGRATION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../RAIntegration" CACHE PATH "RAIntegration checkout")
+# The submodule (git submodule update --init --recursive), or a checkout next to this one (i.e. to work on both);
+# -DRA_INTEGRATION_DIR=... picks another one.
+set(RA_INTEGRATION_DEFAULT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/RAIntegration")
+if(NOT EXISTS "${RA_INTEGRATION_DEFAULT_DIR}/CMakeLists.txt" AND
+   EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../RAIntegration/CMakeLists.txt")
+  set(RA_INTEGRATION_DEFAULT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../RAIntegration")
+endif()
+set(RA_INTEGRATION_DIR "${RA_INTEGRATION_DEFAULT_DIR}" CACHE PATH "RAIntegration checkout")
 if(NOT EXISTS "${RA_INTEGRATION_DIR}/CMakeLists.txt")
-  message(FATAL_ERROR "RAIntegration not found at ${RA_INTEGRATION_DIR}; set RA_INTEGRATION_DIR")
+  message(FATAL_ERROR "RAIntegration not found at ${RA_INTEGRATION_DIR}: git submodule update --init --recursive, or set RA_INTEGRATION_DIR")
+endif()
+if(NOT EXISTS "${RA_INTEGRATION_DIR}/wxWidgets/CMakeLists.txt")
+  message(FATAL_ERROR "RAIntegration's submodules are missing: git submodule update --init --recursive")
 endif()
 set(RA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 # the toolkit's windows are native wxWidgets windows (built from RAIntegration's wxWidgets submodule)

@@ -17,3 +17,7 @@
 [submodule "src/nfd"]
 	path = src/nfd
 	url = https://github.com/btzy/nativefiledialog-extended.git
+[submodule "src/RAIntegration"]
+	path = src/RAIntegration
+	url = https://github.com/vhoxha08/RAIntegration.git
+	branch = cross-platform
