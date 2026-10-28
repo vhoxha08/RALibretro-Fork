@@ -13,20 +13,17 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 
-# ---- Dear ImGui (menu bar and dialogs outside Windows) --------------------------------------------
-# defined before RAIntegration, which builds its ImGui UI backend against this target
+# ---- Dear ImGui (the toolkit's overlay outside Windows) --------------------------------------------
+# defined before RAIntegration, which draws its overlay with this target
 set(IMGUI_DIR src/imgui)
 add_library(imgui STATIC
   ${IMGUI_DIR}/imgui.cpp
   ${IMGUI_DIR}/imgui_draw.cpp
   ${IMGUI_DIR}/imgui_tables.cpp
   ${IMGUI_DIR}/imgui_widgets.cpp
-  ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
-  ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
   ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 target_include_directories(imgui PUBLIC ${IMGUI_DIR})
-target_link_libraries(imgui PUBLIC SDL2::SDL2)
 if(APPLE)
   target_compile_definitions(imgui PRIVATE GL_SILENCE_DEPRECATION)
 endif()

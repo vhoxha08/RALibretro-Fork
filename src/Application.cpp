@@ -1978,7 +1978,7 @@ void Application::enableItems(const UINT* items, size_t count, UINT enable)
     EnableMenuItem(_menu, *items, enable);
   }
 #else
-  // the ImGui menu derives enabled items from the application state
+  // the native menu derives enabled items from the application state (MenuNative.cpp)
   (void)items; (void)count; (void)enable;
 #endif
 }
