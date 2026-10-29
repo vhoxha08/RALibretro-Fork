@@ -1,8 +1,10 @@
-# Builds the macOS application (RALibretro.app, Apple Silicon) for each push to the cross-platform branch and publishes
-# it as a GitHub release holding one file, RALibretro-macOS.zip. The newest is the latest release, which this link
-# always downloads: https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-macOS.zip
+# Builds RALibretro for macOS (RALibretro.app, Apple Silicon) and Linux (an AppImage, x86_64) for each push to the
+# cross-platform branch, and publishes both in one GitHub release. The newest is the latest release, which these links
+# always download:
+#   https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-macOS.zip
+#   https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-x86_64.AppImage
 # Pull requests are only built.
-name: macOS
+name: Build
 
 on:
   push:
@@ -22,6 +24,8 @@ jobs:
     runs-on: macos-15
     env:
       MACOSX_DEPLOYMENT_TARGET: "15.0"
+    outputs:
+      version: ${{ steps.package.outputs.version }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -43,23 +47,81 @@ jobs:
       run: ninja -C build-release.noindex RALibretro
 
     - name: Package
+      id: package
       run: |
         # ditto keeps the bundle's permissions and signature
         ditto -c -k --keepParent build-release.noindex/RALibretro.app RALibretro-macOS.zip
-        # only version tags, not the macos-... tags of the releases (see CMakeLists.txt)
-        echo "VERSION=$(git describe --tags --match '[0-9]*')" >> "$GITHUB_ENV"
+        # only version tags, not the build-... tags of the releases (see CMakeLists.txt)
+        echo "version=$(git describe --tags --match '[0-9]*')" >> "$GITHUB_OUTPUT"
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: macOS
+        path: RALibretro-macOS.zip
+
+  RALibretro-Linux:
+    runs-on: ubuntu-latest
+    # an older Linux, so the AppImage runs on the Linux systems in use (it needs this one's glibc, 2.35, or later)
+    container: ubuntu:22.04
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build git pkg-config file curl \
+          ca-certificates libgtk-3-dev libsdl2-dev libcurl4-openssl-dev libgl-dev libegl-dev libx11-dev \
+          libwayland-dev wayland-protocols libxkbcommon-dev zlib1g-dev
+
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Fetch RAIntegration's tags
+      run: |
+        # (the checkout belongs to another user than the container's)
+        git config --global --add safe.directory '*'
+        git -C src/RAIntegration fetch --quiet --tags origin
+
+    - name: Configure
+      run: cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: ninja -C build-release RALibretro
+
+    - name: Package
+      run: etc/linux/make-appimage.sh build-release .
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: Linux
+        path: RALibretro-x86_64.AppImage
+
+  Publish:
+    if: github.event_name != 'pull_request'
+    needs: [RALibretro-macOS, RALibretro-Linux]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download
+      uses: actions/download-artifact@v4
 
     - name: Publish
-      if: github.event_name != 'pull_request'
       env:
         GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ needs.RALibretro-macOS.outputs.version }}
       run: |
-        tag="macos-$VERSION"
-        if gh release view "$tag" > /dev/null 2>&1; then
+        tag="build-$VERSION"
+        files="macOS/RALibretro-macOS.zip Linux/RALibretro-x86_64.AppImage"
+        if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
           # the same commit built again
-          gh release upload "$tag" RALibretro-macOS.zip --clobber
+          gh release upload "$tag" $files --clobber --repo "$GITHUB_REPOSITORY"
         else
-          gh release create "$tag" RALibretro-macOS.zip --target "$GITHUB_SHA" --latest \
-            --title "macOS build $VERSION" \
-            --notes "RALibretro for macOS 15 or later on Apple Silicon, built from ${GITHUB_SHA::7} (branch cross-platform). Unzip RALibretro-macOS.zip and copy RALibretro.app to /Applications. It's signed ad hoc, so macOS refuses to open it the first time: open it, then allow it in System Settings → Privacy & Security (Open Anyway)."
+          gh release create "$tag" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title "Build $VERSION" \
+            --notes "RALibretro (fork) built from ${GITHUB_SHA::7} (branch cross-platform).
+
+        - **macOS** 15 or later on Apple Silicon: RALibretro-macOS.zip. Unzip it and copy RALibretro.app to /Applications. It's signed ad hoc, so macOS refuses to open it the first time: open it, then allow it in System Settings → Privacy & Security (Open Anyway).
+        - **Linux** x86_64: RALibretro-x86_64.AppImage. Make it executable (chmod +x) and run it. It uses Wayland when there is one."
         fi

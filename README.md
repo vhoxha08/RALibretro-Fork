@@ -7,10 +7,10 @@ The "multi-emulation" feature is only possible because it uses [libretro](https:
 The integration with RetroAchievements.org site is done by the [RAIntegration](https://github.com/RetroAchievements/RAIntegration).
 
 
-## macOS (`cross-platform` branch)
+## macOS and Linux (`cross-platform` branch)
 
-This branch runs RALibretro natively on macOS (Apple Silicon). The Windows build is unchanged, except for the name it
-gives RetroAchievements (see below).
+This branch runs RALibretro natively on macOS (Apple Silicon) and Linux (x86_64). The Windows build is unchanged,
+except for the name it gives RetroAchievements (see below).
 
 It isn't the official RALibretro: it tells RetroAchievements it's `RALibRetro-fork` (in its User-Agent). The server
 doesn't know that client, so it accepts casual unlocks only (a "Warning: Unknown Emulator" entry says so) until the
@@ -28,18 +28,22 @@ RetroAchievements team approves it for hardcore. The toolkit's settings and logi
 
 Each push to the `cross-platform` branch is built by GitHub Actions and published as a
 [release](https://github.com/vhoxha08/RALibretro-Fork/releases). The latest:
-[RALibretro-macOS.zip](https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-macOS.zip).
-Unzip it and copy `RALibretro.app` to `/Applications`. It needs macOS 15 or later on Apple Silicon.
 
-The application is signed ad hoc, not by an Apple developer, so macOS refuses to open it the first time: open it,
-then allow it in *System Settings → Privacy & Security* (*Open Anyway*).
+- macOS 15 or later on Apple Silicon:
+  [RALibretro-macOS.zip](https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-macOS.zip).
+  Unzip it and copy `RALibretro.app` to `/Applications`. The application is signed ad hoc, not by an Apple developer,
+  so macOS refuses to open it the first time: open it, then allow it in *System Settings → Privacy & Security*
+  (*Open Anyway*).
+- Linux on x86_64 (glibc 2.35 or later: Ubuntu 22.04, Fedora 36 and newer, Bazzite):
+  [RALibretro-x86_64.AppImage](https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-x86_64.AppImage).
+  Make it executable (`chmod +x RALibretro-x86_64.AppImage`) and run it.
 
-### Requirements
+### macOS: requirements
 
 - macOS 11 or later on Apple Silicon, with the Xcode command line tools (`xcode-select --install`)
 - [Homebrew](https://brew.sh): `brew install cmake ninja sdl2-compat`
 
-### Building
+### macOS: building
 
 ```
 git clone --recursive -b cross-platform https://github.com/vhoxha08/RALibretro-Fork.git RALibretro
@@ -54,6 +58,25 @@ the version of macOS it was built on or later (Homebrew's SDL is built for it; `
 sets it for the rest). The first build takes a while (it builds wxWidgets).
 
 (A build folder named `*.noindex` keeps Spotlight, and the Apps view, from listing the application built in it.)
+
+### Linux: building
+
+In a Fedora or Ubuntu system (or a distrobox, on an immutable one like Bazzite or SteamOS), with GTK 3, SDL 2,
+libcurl, OpenGL/EGL, X11 and Wayland's development packages, i.e. on Ubuntu:
+
+```
+sudo apt install build-essential cmake ninja-build git pkg-config libgtk-3-dev libsdl2-dev libcurl4-openssl-dev \
+  libgl-dev libegl-dev libx11-dev libwayland-dev wayland-protocols libxkbcommon-dev zlib1g-dev
+git clone --recursive -b cross-platform https://github.com/vhoxha08/RALibretro-Fork.git RALibretro
+cd RALibretro
+cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+ninja -C build-release RALibretro
+etc/linux/make-appimage.sh build-release   # RALibretro-x86_64.AppImage (downloads linuxdeploy the first time)
+```
+
+The AppImage uses Wayland when there is one. Under X11 with NVIDIA's driver the game stays black (wxWidgets can't make
+an EGL surface for the window there); Wayland works with it. The data goes to `~/.local/share/RALibretro`, like
+`~/Library/Application Support/RALibretro` on macOS (below).
 
 ### Where the data goes
 
