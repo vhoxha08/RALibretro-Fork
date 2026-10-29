@@ -1,8 +1,9 @@
-# Builds RALibretro for macOS (RALibretro.app, Apple Silicon) and Linux (an AppImage, x86_64) for each push to the
-# cross-platform branch, and publishes both in one GitHub release. The newest is the latest release, which these links
-# always download:
+# Builds RALibretro for macOS (RALibretro.app, Apple Silicon), Linux (an AppImage, x86_64) and Windows (x64) for each
+# push to the cross-platform branch, and publishes them in one GitHub release. The newest is the latest release, which
+# these links always download:
 #   https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-macOS.zip
 #   https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-x86_64.AppImage
+#   https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-Windows-x64.zip
 # Pull requests are only built.
 name: Build
 
@@ -104,11 +105,52 @@ jobs:
         name: Linux
         path: RALibretro-x86_64.AppImage
 
+  RALibretro-Windows:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Only version tags
+      shell: bash
+      run: |
+        # RAInterface's MakeBuildVer.bat takes the closest tag, whatever its name: the version would be a release's
+        # build-... tag (CMake makes the other builds look at version tags only, see CMakeLists.txt)
+        git tag -l | grep -v '^[0-9]' | xargs -r git tag -d > /dev/null
+
+    - name: Install MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build
+      run: msbuild.exe -m RALibretro.sln -p:Configuration=Release -p:Platform=x64
+
+    - name: Package
+      id: package
+      shell: bash
+      run: |
+        # bin64: RALibRetro.exe, SDL2.dll, Cores/cores.json and the overlay (it downloads RA_Integration.dll itself)
+        mkdir RALibretro && cp -r bin64/* RALibretro/
+        7z a -bd RALibretro-Windows-x64.zip RALibretro > /dev/null
+        echo "version=$(git describe --tags --match '[0-9]*')" >> "$GITHUB_OUTPUT"
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: Windows
+        path: RALibretro-Windows-x64.zip
+
   Publish:
-    # as soon as one of them built (i.e. GitHub had no macOS machine for the other): the release then has the previous
-    # release's file for the other, so the latest release always has both (the links above keep working)
-    if: always() && github.event_name != 'pull_request' && (needs.RALibretro-macOS.result == 'success' || needs.RALibretro-Linux.result == 'success')
-    needs: [RALibretro-macOS, RALibretro-Linux]
+    # as soon as one of them built (i.e. GitHub had no macOS machine for another): the release then has the previous
+    # release's file for the others, so the latest release always has them all (the links above keep working)
+    if: >-
+      always() && github.event_name != 'pull_request' && (needs.RALibretro-macOS.result == 'success' ||
+      needs.RALibretro-Linux.result == 'success' || needs.RALibretro-Windows.result == 'success')
+    needs: [RALibretro-macOS, RALibretro-Linux, RALibretro-Windows]
     runs-on: ubuntu-latest
     steps:
     - name: Download
@@ -118,12 +160,12 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         GH_REPO: ${{ github.repository }}
-        VERSION: ${{ needs.RALibretro-macOS.outputs.version || needs.RALibretro-Linux.outputs.version }}
+        VERSION: ${{ needs.RALibretro-macOS.outputs.version || needs.RALibretro-Linux.outputs.version || needs.RALibretro-Windows.outputs.version }}
       run: |
         tag="build-$VERSION"
         files=()
         missing=()
-        for file in macOS/RALibretro-macOS.zip Linux/RALibretro-x86_64.AppImage; do
+        for file in macOS/RALibretro-macOS.zip Linux/RALibretro-x86_64.AppImage Windows/RALibretro-Windows-x64.zip; do
           if [ -f "$file" ]; then
             files+=("$file")
           else
@@ -153,6 +195,7 @@ jobs:
 
         - **macOS** 15 or later on Apple Silicon: RALibretro-macOS.zip. Unzip it and copy RALibretro.app to /Applications. It's signed ad hoc, so macOS refuses to open it the first time: open it, then allow it in System Settings → Privacy & Security (Open Anyway).
         - **Linux** x86_64: RALibretro-x86_64.AppImage. Make it executable (chmod +x) and run it. It uses Wayland when there is one.
+        - **Windows** x64: RALibretro-Windows-x64.zip. Unzip it and run RALibretro\\RALibRetro.exe; it downloads RA_Integration.dll (the official one) when it starts.
         $carried
         EOF
         gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --latest --title "Build $VERSION" --notes-file notes.md

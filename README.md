@@ -37,6 +37,10 @@ Each push to the `cross-platform` branch is built by GitHub Actions and publishe
 - Linux on x86_64 (glibc 2.35 or later: Ubuntu 22.04, Fedora 36 and newer, Bazzite):
   [RALibretro-x86_64.AppImage](https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-x86_64.AppImage).
   Make it executable (`chmod +x RALibretro-x86_64.AppImage`) and run it.
+- Windows x64: [RALibretro-Windows-x64.zip](https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-Windows-x64.zip).
+  Unzip it and run `RALibretro\RALibRetro.exe`. Like the official RALibretro, it downloads the official
+  `RA_Integration.dll` when it starts. (Building it yourself, from `RALibretro.sln`: the version is the closest tag, so
+  delete the releases' `build-...` tags from your clone first, i.e. `git tag -l "build-*" | xargs git tag -d`.)
 
 ### macOS: requirements
 
