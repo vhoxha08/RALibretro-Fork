@@ -211,7 +211,9 @@ void Video::redraw()
 
 void Video::draw(bool force)
 {
-  if (_texture == 0)
+  // (the game image's vertices are set up with its first frame: a redraw before that would draw without them, an
+  // error that turns off all drawing)
+  if (_texture == 0 || _vertexArray == 0)
   {
     // no game image yet, but the toolkit's overlay (i.e. the welcome popup) is shown over the black window
     if (_overlayTexture != 0 || _overlayChanged)
