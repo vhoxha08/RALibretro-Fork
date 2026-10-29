@@ -58,6 +58,20 @@ git submodule update --remote src/RAIntegration
 git add src/RAIntegration && git commit -m "Update RAIntegration"
 ```
 
+### Smoke test
+
+`etc/macos/smoke-test.sh` starts a game with a core, takes screenshots of the game and of the in-game overlay, and
+quits. It fails when the game doesn't load, the application doesn't stay up, or the log has video errors:
+
+```
+etc/macos/smoke-test.sh desmume_libretro 18 ~/roms/nds/game.nds
+etc/macos/smoke-test.sh -a build.noindex/RALibretro.app quicknes_libretro 7 ~/roms/nes/game.nes
+```
+
+The second argument is the RetroAchievements console id (i.e. 7 NES, 18 Nintendo DS: a core's `systems` in
+`etc/cores.json`). The screenshots and the log go to `$TMPDIR/ralibretro-smoke-test` (`-o` picks another folder). The
+terminal needs the Screen Recording and Accessibility permissions.
+
 
 ## Building RALibretro with MSYS2/Makefile
 
