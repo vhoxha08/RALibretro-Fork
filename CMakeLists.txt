@@ -36,10 +36,21 @@ add_subdirectory("${RA_INTEGRATION_DIR}" RAIntegration EXCLUDE_FROM_ALL)
 # ---- generated version header ----------------------------------------------------------------
 set(RALIBRETRO_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${RALIBRETRO_GENERATED_DIR})
+# The version is the closest tag: only version tags count ("1.8.4", not the "macos-..." tags of the builds published
+# by .github/workflows/macos.yml), so RAInterface's script is run from a copy that only looks at those.
+set(RALIBRETRO_BUILDVER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/src/RAInterface/MakeBuildVer.sh)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${RALIBRETRO_BUILDVER_SCRIPT})
+file(READ ${RALIBRETRO_BUILDVER_SCRIPT} RALIBRETRO_BUILDVER)
+string(REPLACE "git describe --tags 2>&1" "git describe --tags --match '[0-9]*' 2>&1" RALIBRETRO_VERSION_TAGS_ONLY
+       "${RALIBRETRO_BUILDVER}")
+if(RALIBRETRO_VERSION_TAGS_ONLY STREQUAL RALIBRETRO_BUILDVER)
+  message(FATAL_ERROR "${RALIBRETRO_BUILDVER_SCRIPT} changed: its git describe isn't the expected one")
+endif()
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/MakeBuildVer.sh "${RALIBRETRO_VERSION_TAGS_ONLY}")
 add_custom_target(RALibretro_BuildVer
   # the empty GitTag argument has to survive CMake's argument handling, hence bash -c
   COMMAND bash -c "bash \"$0\" \"$1\" '' RA_LIBRETRO"
-          ${CMAKE_CURRENT_SOURCE_DIR}/src/RAInterface/MakeBuildVer.sh
+          ${CMAKE_CURRENT_BINARY_DIR}/MakeBuildVer.sh
           ${RALIBRETRO_GENERATED_DIR}/RA_BuildVer.h
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   VERBATIM
@@ -159,7 +170,7 @@ add_custom_command(TARGET RALibretro POST_BUILD
 # Outside of a portable folder, the data goes to ~/Library/Application Support/RALibretro, where the bundle's
 # Resources/Data (the cores list, the overlay) is installed when it starts (see Config::installResources).
 if(APPLE)
-  execute_process(COMMAND git describe --tags --abbrev=0
+  execute_process(COMMAND git describe --tags --abbrev=0 --match "[0-9]*"
                   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                   OUTPUT_VARIABLE RALIBRETRO_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
   if(NOT RALIBRETRO_VERSION)

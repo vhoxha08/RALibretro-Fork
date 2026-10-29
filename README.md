@@ -26,10 +26,10 @@ RetroAchievements team approves it for hardcore. The toolkit's settings and logi
 
 ### Download
 
-Each push to the `cross-platform` branch is built by GitHub Actions: open the latest successful
-[macOS run](https://github.com/vhoxha08/RALibretro-Fork/actions/workflows/macos.yml) and download
-`RALibretro-macOS-<version>` under *Artifacts* (signed in to GitHub). It holds `RALibretro-macOS.zip`, which holds
-`RALibretro.app`: copy that to `/Applications`. It needs macOS 15 or later on Apple Silicon.
+Each push to the `cross-platform` branch is built by GitHub Actions and published as a
+[release](https://github.com/vhoxha08/RALibretro-Fork/releases). The latest:
+[RALibretro-macOS.zip](https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-macOS.zip).
+Unzip it and copy `RALibretro.app` to `/Applications`. It needs macOS 15 or later on Apple Silicon.
 
 The application is signed ad hoc, not by an Apple developer, so macOS refuses to open it the first time: open it,
 then allow it in *System Settings → Privacy & Security* (*Open Anyway*).

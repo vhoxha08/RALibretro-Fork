@@ -1,5 +1,7 @@
-# Builds the macOS application (RALibretro.app, Apple Silicon) for each push to the cross-platform branch: it's a
-# download of the run (Actions → the run → Artifacts), kept for 90 days.
+# Builds the macOS application (RALibretro.app, Apple Silicon) for each push to the cross-platform branch and publishes
+# it as a GitHub release holding one file, RALibretro-macOS.zip. The newest is the latest release, which this link
+# always downloads: https://github.com/vhoxha08/RALibretro-Fork/releases/latest/download/RALibretro-macOS.zip
+# Pull requests are only built.
 name: macOS
 
 on:
@@ -10,6 +12,9 @@ on:
     branches:
       - cross-platform
   workflow_dispatch:
+
+permissions:
+  contents: write # the release
 
 jobs:
   RALibretro-macOS:
@@ -39,12 +44,22 @@ jobs:
 
     - name: Package
       run: |
-        # ditto keeps the bundle's symbolic links and signature
+        # ditto keeps the bundle's permissions and signature
         ditto -c -k --keepParent build-release.noindex/RALibretro.app RALibretro-macOS.zip
-        echo "VERSION=$(git describe --tags)" >> "$GITHUB_ENV"
+        # only version tags, not the macos-... tags of the releases (see CMakeLists.txt)
+        echo "VERSION=$(git describe --tags --match '[0-9]*')" >> "$GITHUB_ENV"
 
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: RALibretro-macOS-${{ env.VERSION }}
-        path: RALibretro-macOS.zip
+    - name: Publish
+      if: github.event_name != 'pull_request'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        tag="macos-$VERSION"
+        if gh release view "$tag" > /dev/null 2>&1; then
+          # the same commit built again
+          gh release upload "$tag" RALibretro-macOS.zip --clobber
+        else
+          gh release create "$tag" RALibretro-macOS.zip --target "$GITHUB_SHA" --latest \
+            --title "macOS build $VERSION" \
+            --notes "RALibretro for macOS 15 or later on Apple Silicon, built from ${GITHUB_SHA::7} (branch cross-platform). Unzip RALibretro-macOS.zip and copy RALibretro.app to /Applications. It's signed ad hoc, so macOS refuses to open it the first time: open it, then allow it in System Settings → Privacy & Security (Open Anyway)."
+        fi
