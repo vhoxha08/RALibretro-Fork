@@ -107,8 +107,9 @@ void LoadROM(const char* sFullPath)
 
 void RA_Init(HWND hWnd)
 {
-  // initialize the DLL
-  RA_Init(hWnd, RA_Libretro, RA_LIBRETRO_VERSION_FULL);
+  // initialize the DLL. This fork tells RetroAchievements it isn't the official RALibretro (its User-Agent and title
+  // say "RALibRetro-fork"): the server treats it as a client it doesn't know (no hardcore unlocks) until approved.
+  RA_InitClient(hWnd, "RALibRetro-fork", RA_LIBRETRO_VERSION_FULL);
 
   // provide callbacks to the DLL
   RA_InstallSharedFunctions(NULL, &CauseUnpause, &CausePause, &RebuildMenu, &GetEstimatedGameTitle, &ResetEmulation, &LoadROM);

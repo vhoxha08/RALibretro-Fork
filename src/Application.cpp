@@ -384,6 +384,22 @@ bool Application::init(const char* title, int width, int height)
       app._video.setOverlayImage(argb, stride, canvasWidth, canvasHeight, x, y, width, height);
     });
 #endif
+    {
+      // the toolkit keeps its settings (the login, hardcore, ...) in RAPrefs_<client>.cfg, and this fork's client is
+      // RALibRetro-fork (see RA_Init): start from RALibretro's the first time
+      const std::string prefs = std::string(_config.getRootFolder()) + "RAPrefs_RALibRetro-fork.cfg";
+      const std::string officialPrefs = std::string(_config.getRootFolder()) + "RAPrefs_RALibRetro.cfg";
+      if (!util::exists(prefs) && util::exists(officialPrefs))
+      {
+        size_t size;
+        void* data = util::loadFile(&_logger, officialPrefs, &size);
+        if (data)
+        {
+          util::saveFile(&_logger, prefs, data, size);
+          free(data);
+        }
+      }
+    }
     RA_Init(g_mainWindow);
 #ifndef _WIN32
     installHostServices();

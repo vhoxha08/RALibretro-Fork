@@ -9,7 +9,13 @@ The integration with RetroAchievements.org site is done by the [RAIntegration](h
 
 ## macOS (`cross-platform` branch)
 
-This branch runs RALibretro natively on macOS (Apple Silicon). The Windows build is unchanged.
+This branch runs RALibretro natively on macOS (Apple Silicon). The Windows build is unchanged, except for the name it
+gives RetroAchievements (see below).
+
+It isn't the official RALibretro: it tells RetroAchievements it's `RALibRetro-fork` (in its User-Agent). The server
+doesn't know that client, so it accepts casual unlocks only (a "Warning: Unknown Emulator" entry says so) until the
+RetroAchievements team approves it for hardcore. The toolkit's settings and login are kept in
+`RAPrefs_RALibRetro-fork.cfg`, copied from RALibretro's `RAPrefs_RALibRetro.cfg` the first time.
 
 - Native window, menu bar and dialogs (wxWidgets), and the RetroAchievements toolkit's windows (Memory Inspector,
   Achievement Editor, ...) as native windows too.
