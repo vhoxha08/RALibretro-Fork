@@ -129,9 +129,11 @@ jobs:
     - name: Build
       shell: bash
       run: |
-        if ! msbuild.exe -m RALibretro.sln -p:Configuration=Release -p:Platform=x64 -flp:"errorsonly;logfile=errors.log"; then
-          # the errors as annotations too: they can be read without a GitHub login, unlike the run's log
-          head -n 20 errors.log | while IFS= read -r line; do echo "::error::$line"; done
+        # (not in parallel: RAHasher needs the RA_BuildVer.h RALibretro's project makes first)
+        if ! msbuild.exe RALibretro.sln -p:Configuration=Release -p:Platform=x64 -flp:"errorsonly;logfile=errors.log"; then
+          # the errors as an annotation too: it can be read without a GitHub login, unlike the run's log (all of them in
+          # one, as a step shows 10 annotations at most)
+          echo "::error title=MSBuild::$(sed -E 's/^ *[0-9]+>//' errors.log | sort -u | head -n 60 | awk 'BEGIN { ORS = "%0A" } { print }')"
           exit 1
         fi
 

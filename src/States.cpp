@@ -37,9 +37,9 @@ along with RALibRetro.  If not, see <http://www.gnu.org/licenses/>.
 #include <winuser.h>
 #include <commdlg.h>
 #include <shlobj.h>
-#else
-#include "Platform.h"
 #endif
+
+#include "Platform.h" // PATH_SEPARATOR (Windows too)
 
 #include "components/Dialog.h"
 
