@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RALibretro
+Comment=Libretro emulator with RetroAchievements
+Exec=RALibretro
+Icon=ralibretro
+Categories=Game;Emulator;
+Terminal=false
