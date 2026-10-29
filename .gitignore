@@ -18,3 +18,6 @@
 
 # CMake build tree
 /build*/
+
+# macOS
+.DS_Store

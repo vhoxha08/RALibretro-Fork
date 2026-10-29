@@ -472,7 +472,8 @@ const char* Config::getVariable(const char* variable)
     }
   }
 
-  _logger->error(TAG "Variable %s not found", variable);
+  // (a variable the core didn't declare: it uses its default, i.e. desmume asking for its OpenGL renderer's options)
+  _logger->warn(TAG "Variable %s not found", variable);
   return NULL;
 }
 
