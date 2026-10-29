@@ -49,6 +49,10 @@ cd "$out"
 hook="$appdir/apprun-hooks/linuxdeploy-plugin-gtk.sh"
 grep -q '^export GDK_BACKEND=x11' "$hook"
 sed -i 's/^export GDK_BACKEND=x11.*/export GDK_BACKEND="${GDK_BACKEND:-wayland,x11}" # Wayland when there is one (see make-appimage.sh)/' "$hook"
+# It also sets GTK_THEME (Adwaita, light or dark as the desktop was when RALibretro started), which makes GTK ignore the
+# desktop's theme and its changes: GTK follows the desktop's theme (i.e. KDE's Breeze) without it.
+grep -q '^export GTK_THEME=' "$hook"
+sed -i '/^export GTK_THEME=/d' "$hook"
 
 "$tools/linuxdeploy-$arch.AppImage" --appdir "$appdir" --output appimage
 echo "made $LDAI_OUTPUT"

@@ -159,7 +159,17 @@ if(APPLE)
   target_link_libraries(RALibretro PRIVATE "-framework AppKit")
 else()
   find_package(X11 REQUIRED) # XInitThreads (see host::init)
-  target_link_libraries(RALibretro PRIVATE OpenGL::EGL OpenGL::GLX X11::X11)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0) # the application's name (see host::init)
+  target_link_libraries(RALibretro PRIVATE OpenGL::EGL OpenGL::GLX X11::X11 PkgConfig::GTK3)
+
+  # the icon, in the executable: the window's, and the desktop file's it writes as an AppImage (see host::init)
+  set(RALIBRETRO_ICON_PNG ${CMAKE_CURRENT_SOURCE_DIR}/etc/linux/ralibretro.png)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${RALIBRETRO_ICON_PNG})
+  file(READ ${RALIBRETRO_ICON_PNG} RALIBRETRO_ICON HEX)
+  string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," RALIBRETRO_ICON "${RALIBRETRO_ICON}")
+  file(WRITE ${RALIBRETRO_GENERATED_DIR}/RALibretroIcon.h
+       "// generated from etc/linux/ralibretro.png\nstatic const unsigned char s_icon[] = {${RALIBRETRO_ICON}};\n")
 
   # cmake --install (i.e. into an AppImage's AppDir, see etc/linux/make-appimage.sh): the executable in bin, its
   # resources in share/RALibretro, installed into the per-user data folder when it starts (see Config)

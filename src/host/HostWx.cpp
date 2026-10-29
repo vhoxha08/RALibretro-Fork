@@ -78,6 +78,64 @@ extern "C" void* glXGetCurrentDisplay(void);
 extern "C" void* glXGetCurrentContext(void);
 extern "C" int glXMakeCurrent(void* display, unsigned long drawable, void* context);
 extern "C" int XInitThreads(void);
+
+#include <gdk/gdk.h>
+#include <glib.h>
+#include <wx/bitmap.h>
+#include <wx/icon.h>
+#include <wx/image.h>
+
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
+
+#include "RALibretroIcon.h" // s_icon (PNG)
+
+// The name the desktop knows the application by (Wayland's app id, X11's window class): its desktop file is
+// RALibretro.desktop, whose icon the task bar shows.
+static const char* const s_appId = "RALibretro";
+
+// Run as an AppImage (its runtime sets APPIMAGE to its path), RALibretro writes that desktop file and the icon in the
+// user's data folder, so the desktop shows its icon and lists it, like AppImage integration tools do. They're written
+// again when the AppImage moved.
+static void integrateAppImage()
+{
+  const char* appImage = getenv("APPIMAGE");
+  const char* home = getenv("HOME");
+  if (!appImage || !*appImage || !home || !*home)
+    return;
+
+  namespace fs = std::filesystem;
+  const char* dataHome = getenv("XDG_DATA_HOME");
+  const fs::path data = (dataHome && *dataHome) ? fs::path(dataHome) : fs::path(home) / ".local/share";
+  const fs::path icon = data / "icons/hicolor/256x256/apps/ralibretro.png";
+  const fs::path desktop = data / "applications" / (std::string(s_appId) + ".desktop");
+
+  const std::string contents = std::string("[Desktop Entry]\n"
+    "Type=Application\n"
+    "Name=RALibretro\n"
+    "Comment=Libretro emulator with RetroAchievements\n"
+    "Exec=\"") + appImage + "\"\n"
+    "Icon=" + icon.string() + "\n"
+    "Categories=Game;Emulator;\n"
+    "Terminal=false\n"
+    "StartupWMClass=" + s_appId + "\n";
+
+  std::ifstream current(desktop);
+  if (std::string(std::istreambuf_iterator<char>(current), std::istreambuf_iterator<char>()) == contents &&
+      fs::exists(icon))
+  {
+    return;
+  }
+
+  std::error_code error;
+  fs::create_directories(icon.parent_path(), error);
+  fs::create_directories(desktop.parent_path(), error);
+  std::ofstream(icon, std::ios::binary).write(reinterpret_cast<const char*>(s_icon), sizeof(s_icon));
+  std::ofstream(desktop) << contents;
+}
 #endif
 
 namespace hostwx
@@ -596,13 +654,21 @@ bool host::init(int argc, char* argv[])
 {
 #ifndef __APPLE__
   // the game thread makes GL contexts current and swaps through the X connection GTK uses (GLX): Xlib allows that only
-  // when told so before anything else uses it (NVIDIA's driver otherwise fails to draw)
+  // when told so before anything else uses it
   XInitThreads();
 #endif
 
   wxApp::SetInstance(new HostApp());
   if (!wxEntryStart(argc, argv) || !wxTheApp->CallOnInit())
     return false;
+
+#ifndef __APPLE__
+  // (before any window: the name otherwise comes from the executable's, i.e. AppRun.wrapped in an AppImage)
+  g_set_prgname(s_appId);
+  gdk_set_program_class(s_appId);
+  wxTheApp->SetAppName(s_appId); // (its dialogs' titles)
+  integrateAppImage();
+#endif
 
   // a failed assertion is logged instead of blocking the game with a dialog
   wxSetAssertHandler([](const wxString& file, int line, const wxString& func, const wxString& cond, const wxString& msg)
@@ -707,6 +773,14 @@ void host::exitMainLoop()
 void* host::createMainWindow(const char* title, int x, int y, int width, int height)
 {
   s_frame = new MainFrame(wxString::FromUTF8(title));
+#ifndef __APPLE__
+  // (macOS shows the bundle's)
+  if (!wxImage::FindHandler(wxBITMAP_TYPE_PNG))
+    wxImage::AddHandler(new wxPNGHandler());
+  wxIcon icon;
+  icon.CopyFromBitmap(wxBitmap::NewFromPNGData(s_icon, sizeof(s_icon)));
+  s_frame->SetIcon(icon);
+#endif
   s_frame->SetClientSize(width, height);
 
   // the remembered place on the display it was on, or the middle of the main display. The whole window fits on that

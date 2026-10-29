@@ -6,3 +6,4 @@ Exec=RALibretro
 Icon=ralibretro
 Categories=Game;Emulator;
 Terminal=false
+StartupWMClass=RALibretro
