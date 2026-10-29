@@ -127,7 +127,13 @@ jobs:
       uses: microsoft/setup-msbuild@v2
 
     - name: Build
-      run: msbuild.exe -m RALibretro.sln -p:Configuration=Release -p:Platform=x64
+      shell: bash
+      run: |
+        if ! msbuild.exe -m RALibretro.sln -p:Configuration=Release -p:Platform=x64 -flp:"errorsonly;logfile=errors.log"; then
+          # the errors as annotations too: they can be read without a GitHub login, unlike the run's log
+          head -n 20 errors.log | while IFS= read -r line; do echo "::error::$line"; done
+          exit 1
+        fi
 
     - name: Package
       id: package

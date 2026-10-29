@@ -60,8 +60,8 @@ before="$(du -sm "$appdir" | cut -f1)"
 strip --strip-unneeded "$appdir/usr/bin/RALibretro"
 
 lib="$appdir/usr/lib"
-needed() { readelf -d "$@" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u; }
-soname() { readelf -d "$1" 2>/dev/null | sed -n 's/.*Library soname: \[\(.*\)\]/\1/p'; }
+needed() { { readelf -d "$@" 2>/dev/null || true; } | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u; }
+soname() { { readelf -d "$1" 2>/dev/null || true; } | sed -n 's/.*Library soname: \[\(.*\)\]/\1/p'; }
 
 # the AppDir's libraries librsvg uses, directly or not: removed below when nothing else uses them
 candidates=()
@@ -84,8 +84,9 @@ removed=()
 changed=1
 while [ $changed -eq 1 ]; do
   changed=0
-  used="$(find "$appdir" -type f \( -name '*.so*' -o -path '*/usr/bin/*' \) -print0 | xargs -0 readelf -d 2>/dev/null |
-          sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u)"
+  # (readelf fails on a file named .so that isn't a library: it just adds nothing)
+  used="$(find "$appdir" -type f \( -name '*.so*' -o -path '*/usr/bin/*' \) -print0 |
+          { xargs -0 readelf -d 2>/dev/null || true; } | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u)"
   for name in "${candidates[@]}"; do
     [ -e "$lib/$name" ] || continue
     so="$(soname "$lib/$name")"
