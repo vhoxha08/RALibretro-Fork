@@ -56,7 +56,8 @@ failures=()
 alive() { kill -0 "$pid" 2>/dev/null; }
 loaded() { grep -q '\[COR\] Content ".*" loaded' "$log"; }
 screenshot() {
-  "$drive" activate "$pid"
+  # (the application may quit meanwhile, i.e. after a dialog: that's reported below)
+  "$drive" activate "$pid" 2>/dev/null || true
   sleep 1
   # the main window, or the whole screen when the game didn't load (the dialog saying why is a window of its own)
   local window=""
@@ -74,10 +75,10 @@ sleep "$wait"
 if alive; then
   screenshot game
   # shellcheck disable=SC2086 # (several keys)
-  "$drive" keys "$pid" 53:1:2 $keys
+  "$drive" keys "$pid" 53:1:2 $keys || true
   sleep 1
   screenshot overlay
-  "$drive" keys "$pid" 53:1:1
+  "$drive" keys "$pid" 53:1:1 || true
   alive || failures+=("exited while the overlay was shown")
 else
   failures+=("exited before the screenshots (i.e. the game didn't load: see the log)")
