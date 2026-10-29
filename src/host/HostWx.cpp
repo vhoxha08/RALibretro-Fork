@@ -69,6 +69,15 @@ namespace hostmac
   int  getSwapInterval();
   void* getGLProcAddress(const char* name);
 }
+#else
+// wxGLCanvas draws with EGL (Wayland) or GLX (X11). Without X11's headers: they define None, which breaks enums.
+#define EGL_NO_X11
+#include <EGL/egl.h>
+extern "C" void (*glXGetProcAddressARB(const unsigned char* name))(void);
+extern "C" void* glXGetCurrentDisplay(void);
+extern "C" void* glXGetCurrentContext(void);
+extern "C" int glXMakeCurrent(void* display, unsigned long drawable, void* context);
+extern "C" int XInitThreads(void);
 #endif
 
 namespace hostwx
@@ -585,6 +594,12 @@ namespace
 
 bool host::init(int argc, char* argv[])
 {
+#ifndef __APPLE__
+  // the game thread makes GL contexts current and swaps through the X connection GTK uses (GLX): Xlib allows that only
+  // when told so before anything else uses it (NVIDIA's driver otherwise fails to draw)
+  XInitThreads();
+#endif
+
   wxApp::SetInstance(new HostApp());
   if (!wxEntryStart(argc, argv) || !wxTheApp->CallOnInit())
     return false;
@@ -950,7 +965,13 @@ void host::makeGLContextCurrent(void* context)
   }
 #endif
 
-  static_cast<wxGLContext*>(context)->SetCurrent(*s_frame->canvas());
+  if (!static_cast<wxGLContext*>(context)->SetCurrent(*s_frame->canvas()))
+  {
+    static bool s_reported = false;
+    if (!s_reported)
+      fprintf(stderr, "could not make the OpenGL context current\n");
+    s_reported = true;
+  }
 }
 
 void host::releaseGLContext()
@@ -962,6 +983,12 @@ void host::releaseGLContext()
     s_viewContextLocked = false;
   }
   hostmac::clearCurrent();
+#else
+  // a context is current on one thread at a time: the game thread can only make it current once this one let go
+  if (eglGetCurrentContext() != EGL_NO_CONTEXT)
+    eglMakeCurrent(eglGetCurrentDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+  else if (glXGetCurrentContext())
+    glXMakeCurrent(glXGetCurrentDisplay(), 0, nullptr);
 #endif
 }
 
@@ -980,7 +1007,9 @@ void host::setSwapInterval(int interval)
 #ifdef __APPLE__
   hostmac::setSwapInterval(interval);
 #else
-  (void)interval;
+  // (the current context's; GLX contexts keep their driver's default)
+  if (eglGetCurrentContext() != EGL_NO_CONTEXT)
+    eglSwapInterval(eglGetCurrentDisplay(), interval);
 #endif
 }
 
@@ -998,8 +1027,10 @@ void* host::getGLProcAddress(const char* name)
 #ifdef __APPLE__
   return hostmac::getGLProcAddress(name);
 #else
-  (void)name;
-  return nullptr;
+  // the functions of the context that's current: EGL's, or GLX's
+  if (eglGetCurrentContext() != EGL_NO_CONTEXT)
+    return reinterpret_cast<void*>(eglGetProcAddress(name));
+  return reinterpret_cast<void*>(glXGetProcAddressARB(reinterpret_cast<const unsigned char*>(name)));
 #endif
 }
 

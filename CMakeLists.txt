@@ -11,7 +11,12 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(SDL2 REQUIRED)
-find_package(OpenGL REQUIRED)
+if(APPLE)
+  find_package(OpenGL REQUIRED)
+else()
+  # the OpenGL functions are looked up through EGL (Wayland) or GLX (X11), like wxGLCanvas draws
+  find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL GLX)
+endif()
 
 # ---- RAIntegration (linked statically instead of loading RA_Integration.dll) ---------------
 # The submodule (git submodule update --init --recursive), or a checkout next to this one (i.e. to work on both);
@@ -36,8 +41,8 @@ add_subdirectory("${RA_INTEGRATION_DIR}" RAIntegration EXCLUDE_FROM_ALL)
 # ---- generated version header ----------------------------------------------------------------
 set(RALIBRETRO_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${RALIBRETRO_GENERATED_DIR})
-# The version is the closest tag: only version tags count ("1.8.4", not the "macos-..." tags of the builds published
-# by .github/workflows/macos.yml), so RAInterface's script is run from a copy that only looks at those.
+# The version is the closest tag: only version tags count ("1.8.4", not the "build-..." tags of the builds published
+# by .github/workflows/build.yml), so RAInterface's script is run from a copy that only looks at those.
 set(RALIBRETRO_BUILDVER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/src/RAInterface/MakeBuildVer.sh)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${RALIBRETRO_BUILDVER_SCRIPT})
 file(READ ${RALIBRETRO_BUILDVER_SCRIPT} RALIBRETRO_BUILDVER)
@@ -48,8 +53,10 @@ if(RALIBRETRO_VERSION_TAGS_ONLY STREQUAL RALIBRETRO_BUILDVER)
 endif()
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/MakeBuildVer.sh "${RALIBRETRO_VERSION_TAGS_ONLY}")
 add_custom_target(RALibretro_BuildVer
-  # the empty GitTag argument has to survive CMake's argument handling, hence bash -c
-  COMMAND bash -c "bash \"$0\" \"$1\" '' RA_LIBRETRO"
+  # the script runs git in the build folder, which may be outside of the repository: point git at it explicitly. (The
+  # empty GitTag argument has to survive CMake's argument handling, hence bash -c.)
+  COMMAND ${CMAKE_COMMAND} -E env GIT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.git GIT_WORK_TREE=${CMAKE_CURRENT_SOURCE_DIR}
+          bash -c "bash \"$0\" \"$1\" '' RA_LIBRETRO"
           ${CMAKE_CURRENT_BINARY_DIR}/MakeBuildVer.sh
           ${RALIBRETRO_GENERATED_DIR}/RA_BuildVer.h
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -150,6 +157,18 @@ if(APPLE)
   target_compile_definitions(RALibretro PRIVATE GL_SILENCE_DEPRECATION)
   target_sources(RALibretro PRIVATE src/host/HostMac.mm)
   target_link_libraries(RALibretro PRIVATE "-framework AppKit")
+else()
+  find_package(X11 REQUIRED) # XInitThreads (see host::init)
+  target_link_libraries(RALibretro PRIVATE OpenGL::EGL OpenGL::GLX X11::X11)
+
+  # cmake --install (i.e. into an AppImage's AppDir, see etc/linux/make-appimage.sh): the executable in bin, its
+  # resources in share/RALibretro, installed into the per-user data folder when it starts (see Config)
+  include(GNUInstallDirs)
+  install(TARGETS RALibretro RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(FILES etc/cores.json DESTINATION ${CMAKE_INSTALL_DATADIR}/RALibretro/Cores)
+  install(DIRECTORY ${RA_INTEGRATION_DIR}/RAInterface/overlay/ DESTINATION ${CMAKE_INSTALL_DATADIR}/RALibretro/Overlay)
+  install(FILES etc/linux/RALibretro.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+  install(FILES etc/linux/ralibretro.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps)
 endif()
 
 # Make the build folder a "portable" install: RALibretro uses the folder of the executable (or of the application

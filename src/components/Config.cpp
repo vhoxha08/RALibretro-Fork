@@ -84,6 +84,16 @@ void Config::initRootFolder()
     besideBundle = bundle.substr(0, bundle.find_last_of('/') + 1);
   }
 
+  // installed (an AppImage, or under /usr): the executable in .../bin, its resources in .../share/RALibretro
+  static const std::string binFolder = "/bin/";
+  if (_resourcesFolder.empty() && basePath.size() > binFolder.size() &&
+      basePath.compare(basePath.size() - binFolder.size(), binFolder.size(), binFolder) == 0)
+  {
+    const std::string shareFolder = basePath.substr(0, basePath.size() - binFolder.size() + 1) + "share/RALibretro/";
+    if (util::exists(shareFolder))
+      _resourcesFolder = shareFolder;
+  }
+
   if (_resourcesFolder.empty() && !basePath.empty() && util::exists(basePath + "Cores"))
   {
     _rootFolder = basePath;

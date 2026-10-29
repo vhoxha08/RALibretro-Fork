@@ -20,7 +20,9 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #define WINDOWS_IGNORE_PACKING_MISMATCH 1 // prevent "Windows headers require the default packing option" error - need to upgrade SDL library to fix it
 
 #include <SDL.h>
-#include <SDL_syswm.h>
+#ifdef _WIN32
+#include <SDL_syswm.h> // (outside Windows, it brings in X11, whose "None" breaks enums)
+#endif
 
 #include "Application.h"
 #include "Util.h"

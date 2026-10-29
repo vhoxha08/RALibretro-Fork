@@ -21,7 +21,9 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "RA_BuildVer.h"
 
-#include <SDL_syswm.h>
+#ifdef _WIN32
+#include <SDL_syswm.h> // (outside Windows, it brings in X11, whose "None" breaks enums)
+#endif
 
 #include "libretro/Core.h"
 #include "jsonsax/jsonsax.h"
