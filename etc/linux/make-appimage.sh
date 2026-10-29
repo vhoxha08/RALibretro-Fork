@@ -54,5 +54,53 @@ sed -i 's/^export GDK_BACKEND=x11.*/export GDK_BACKEND="${GDK_BACKEND:-wayland,x
 grep -q '^export GTK_THEME=' "$hook"
 sed -i '/^export GTK_THEME=/d' "$hook"
 
+# Smaller: the executable without its symbols, and GTK without an SVG loader (RALibretro's images are PNG). librsvg and
+# the libraries only it uses (i.e. ICU's data, 28 MB) were about half of the AppDir.
+before="$(du -sm "$appdir" | cut -f1)"
+strip --strip-unneeded "$appdir/usr/bin/RALibretro"
+
+lib="$appdir/usr/lib"
+needed() { readelf -d "$@" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u; }
+soname() { readelf -d "$1" 2>/dev/null | sed -n 's/.*Library soname: \[\(.*\)\]/\1/p'; }
+
+# the AppDir's libraries librsvg uses, directly or not: removed below when nothing else uses them
+candidates=()
+queue=($(cd "$lib" && ls librsvg-2.so* 2>/dev/null))
+while [ ${#queue[@]} -gt 0 ]; do
+  name="${queue[0]}"
+  queue=("${queue[@]:1}")
+  case " ${candidates[*]} " in *" $name "*) continue ;; esac
+  [ -e "$lib/$name" ] || continue
+  candidates+=("$name")
+  queue+=($(needed "$lib/$name"))
+done
+
+# the SVG loader (and GTK's list of loaders without it), librsvg, then what only they used
+find "$lib/gdk-pixbuf-2.0" -name '*svg*' -delete
+cache="$(find "$lib/gdk-pixbuf-2.0" -name loaders.cache)"
+awk 'BEGIN { RS = ""; ORS = "\n\n" } !/pixbufloader.svg/' "$cache" > "$cache.new" && mv "$cache.new" "$cache"
+rm -f "$lib"/librsvg-2.so* "$lib"/girepository-1.0/Rsvg-*
+removed=()
+changed=1
+while [ $changed -eq 1 ]; do
+  changed=0
+  used="$(find "$appdir" -type f \( -name '*.so*' -o -path '*/usr/bin/*' \) -print0 | xargs -0 readelf -d 2>/dev/null |
+          sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u)"
+  for name in "${candidates[@]}"; do
+    [ -e "$lib/$name" ] || continue
+    so="$(soname "$lib/$name")"
+    if ! grep -qxF "${so:-$name}" <<< "$used"; then
+      rm -f "$lib/$name"
+      removed+=("$name")
+      changed=1
+    fi
+  done
+done
+summary="AppDir: ${before} MB -> $(du -sm "$appdir" | cut -f1) MB; removed librsvg and ${removed[*]:-nothing else}"
+echo "$summary"
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  echo "::notice title=AppImage::$summary"
+fi
+
 "$tools/linuxdeploy-$arch.AppImage" --appdir "$appdir" --output appimage
 echo "made $LDAI_OUTPUT"
