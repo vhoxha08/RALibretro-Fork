@@ -40,6 +40,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <wx/thread.h>
 #include <wx/timer.h>
 
+#include <algorithm>
 #include <atomic>
 #include <climits>
 #include <condition_variable>
@@ -692,10 +693,25 @@ void* host::createMainWindow(const char* title, int x, int y, int width, int hei
 {
   s_frame = new MainFrame(wxString::FromUTF8(title));
   s_frame->SetClientSize(width, height);
-  if (x == INT_MIN || y == INT_MIN || wxDisplay::GetFromPoint(wxPoint(x + 40, y + 10)) == wxNOT_FOUND)
-    s_frame->Centre();
-  else
-    s_frame->Move(x, y);
+
+  // the remembered place on the display it was on, or the middle of the main display. The whole window fits on that
+  // display, outside of the menu bar and the Dock (i.e. remembered at a size larger than the space next to it).
+  const int display = (x == INT_MIN || y == INT_MIN) ? wxNOT_FOUND : wxDisplay::GetFromPoint(wxPoint(x + 40, y + 10));
+  const wxRect area = wxDisplay(display == wxNOT_FOUND ? 0u : (unsigned)display).GetClientArea();
+  wxSize size = s_frame->GetSize();
+  if (size.GetWidth() > area.GetWidth() || size.GetHeight() > area.GetHeight())
+  {
+    size.DecTo(area.GetSize());
+    s_frame->SetSize(size);
+  }
+  if (display == wxNOT_FOUND)
+  {
+    x = area.GetX() + (area.GetWidth() - size.GetWidth()) / 2;
+    y = area.GetY() + (area.GetHeight() - size.GetHeight()) / 2;
+  }
+  x = std::max(area.GetLeft(), std::min(x, area.GetRight() + 1 - size.GetWidth()));
+  y = std::max(area.GetTop(), std::min(y, area.GetBottom() + 1 - size.GetHeight()));
+  s_frame->Move(x, y);
 
   s_frame->rebuildAll();
   s_frame->Show();
