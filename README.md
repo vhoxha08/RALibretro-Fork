@@ -24,6 +24,16 @@ RetroAchievements team approves it for hardcore. The toolkit's settings and logi
 - [RAIntegration](https://github.com/vhoxha08/RAIntegration/tree/cross-platform) is linked into the application
   (it's a submodule, `src/RAIntegration`) instead of being loaded from `RA_Integration.dll`.
 
+### Download
+
+Each push to the `cross-platform` branch is built by GitHub Actions: open the latest successful
+[macOS run](https://github.com/vhoxha08/RALibretro-Fork/actions/workflows/macos.yml) and download
+`RALibretro-macOS-<version>` under *Artifacts* (signed in to GitHub). It holds `RALibretro-macOS.zip`, which holds
+`RALibretro.app`: copy that to `/Applications`. It needs macOS 15 or later on Apple Silicon.
+
+The application is signed ad hoc, not by an Apple developer, so macOS refuses to open it the first time: open it,
+then allow it in *System Settings → Privacy & Security* (*Open Anyway*).
+
 ### Requirements
 
 - macOS 11 or later on Apple Silicon, with the Xcode command line tools (`xcode-select --install`)
@@ -32,15 +42,16 @@ RetroAchievements team approves it for hardcore. The toolkit's settings and logi
 ### Building
 
 ```
-git clone --recursive -b cross-platform https://github.com/vhoxha08/RALibretro.git
+git clone --recursive -b cross-platform https://github.com/vhoxha08/RALibretro-Fork.git RALibretro
 cd RALibretro
 cmake -B build-release.noindex -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build-release.noindex RALibretro
 ```
 
 The result is a self-contained `build-release.noindex/RALibretro.app` (SDL is copied into it): copy it to
-`/Applications`. It's signed ad hoc, so on another Mac it has to be opened with right-click → Open the first time.
-The first build takes a while (it builds wxWidgets).
+`/Applications`. It's signed ad hoc, so on another Mac it has to be allowed the first time (see above), and it needs
+the version of macOS it was built on or later (Homebrew's SDL is built for it; `-DCMAKE_OSX_DEPLOYMENT_TARGET=...`
+sets it for the rest). The first build takes a while (it builds wxWidgets).
 
 (A build folder named `*.noindex` keeps Spotlight, and the Apps view, from listing the application built in it.)
 

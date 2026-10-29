@@ -1,0 +1,50 @@
+# Builds the macOS application (RALibretro.app, Apple Silicon) for each push to the cross-platform branch: it's a
+# download of the run (Actions → the run → Artifacts), kept for 90 days.
+name: macOS
+
+on:
+  push:
+    branches:
+      - cross-platform
+  pull_request:
+    branches:
+      - cross-platform
+  workflow_dispatch:
+
+jobs:
+  RALibretro-macOS:
+    # the application runs on this version of macOS and later: Homebrew's SDL, which it bundles, is built for it
+    runs-on: macos-15
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        # the version comes from the tags (git describe)
+        fetch-depth: 0
+
+    - name: Fetch RAIntegration's tags
+      run: git -C src/RAIntegration fetch --quiet --tags origin
+
+    - name: Install dependencies
+      run: brew install ninja sdl2-compat
+
+    - name: Configure
+      run: cmake -B build-release.noindex -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET
+
+    - name: Build
+      run: ninja -C build-release.noindex RALibretro
+
+    - name: Package
+      run: |
+        # ditto keeps the bundle's symbolic links and signature
+        ditto -c -k --keepParent build-release.noindex/RALibretro.app RALibretro-macOS.zip
+        echo "VERSION=$(git describe --tags)" >> "$GITHUB_ENV"
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: RALibretro-macOS-${{ env.VERSION }}
+        path: RALibretro-macOS.zip
