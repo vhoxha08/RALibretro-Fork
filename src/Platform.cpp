@@ -60,6 +60,7 @@ static const char* getClipboardText()
 static std::mutex g_soundMutex;
 static SDL_AudioDeviceID g_soundDevice = 0;
 static SDL_AudioSpec g_soundSpec;
+static std::string g_lastSound;
 
 static void playSound(const char* utf8Path)
 {
@@ -78,6 +79,12 @@ static void playSound(const char* utf8Path)
 
     SDL_PauseAudioDevice(g_soundDevice, 0);
   }
+
+  // the same sound twice in a row is heard once (i.e. loading a game in casual mode plays info.wav for both the
+  // "Loaded" and the "Casual Mode" popups); on Windows, the second one restarts the first
+  if (g_lastSound == utf8Path && SDL_GetQueuedAudioSize(g_soundDevice) > 0)
+    return;
+  g_lastSound = utf8Path;
 
   SDL_AudioSpec wavSpec;
   Uint8* wavData = nullptr;
