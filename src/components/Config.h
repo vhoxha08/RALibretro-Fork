@@ -61,6 +61,10 @@ public:
   virtual bool getAudioWhileFastForwarding() override { return _audioWhileFastForwarding; }
   virtual int getFastForwardRatio() override { return _fastForwardRatio; }
 
+  // PINE: programs read and write the game's memory (see Pine.h)
+  bool getPineEnabled() const { return _pineEnabled; }
+  unsigned getPineSlot() const { return _pineSlot; }
+
   virtual bool getShowSpeedIndicator() override { return _showSpeedIndicator; }
   virtual void setShowSpeedIndicator(bool value) override { _showSpeedIndicator = value; }
 
@@ -189,8 +193,10 @@ protected:
   bool _backgroundInput;
   bool _showSpeedIndicator;
   bool _gameFocusCaptureMouse;
+  bool _pineEnabled;
 
   int _fastForwardRatio;
+  unsigned _pineSlot;
 
   std::string _key;
 };

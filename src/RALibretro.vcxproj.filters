@@ -126,6 +126,9 @@
     <ClCompile Include="components\Microphone.cpp">
       <Filter>Source Files\components</Filter>
     </ClCompile>
+    <ClCompile Include="components\Pine.cpp">
+      <Filter>Source Files\components</Filter>
+    </ClCompile>
     <ClCompile Include="Hash3DS.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

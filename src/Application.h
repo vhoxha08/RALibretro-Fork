@@ -42,6 +42,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include "components/Input.h"
 #include "components/Logger.h"
 #include "components/Microphone.h"
+#include "components/Pine.h"
 #include "components/VideoContext.h"
 #include "components/Video.h"
 
@@ -137,6 +138,12 @@ protected:
   void        loadState(unsigned ndx);
   void        loadState();
   void        changeCurrentState(unsigned ndx);
+
+  // PINE (see Pine.h): polled from the game loop; the states without dialogs (the client reports failures)
+  friend class PineTarget;
+  void        pollPine();
+  bool        saveStateSlot(unsigned ndx);
+  bool        loadStateSlot(unsigned ndx);
   void        screenshot();
   void        aboutDialog();
   void        resizeWindow(unsigned multiplier);
@@ -202,6 +209,8 @@ protected:
   Input        _input;
   Memory       _memory;
   States       _states;
+  Pine         _pine;
+  unsigned     _pineFailedSlot = 0; // not retried until the setting changes
 
   int          _numAudioFaults;
   int          _numAudioRecoveries;

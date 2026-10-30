@@ -19,6 +19,7 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Config.h"
 
+#include "Pine.h"
 #include "Util.h"
 #include "jsonsax/jsonsax.h"
 #include "RA_Interface.h"
@@ -208,6 +209,8 @@ bool Config::init(libretro::LoggerComponent* logger)
   _backgroundInput = false;
   _showSpeedIndicator = true;
   _gameFocusCaptureMouse = false;
+  _pineEnabled = false;
+  _pineSlot = Pine::kDefaultSlot;
   memset(&_updateDisplayCallback, 0, sizeof(_updateDisplayCallback));
 
   reset();
@@ -708,6 +711,11 @@ std::string Config::serializeEmulatorSettings() const
   json.append("\"gameFocusCaptureMouse\":");
   json.append(_gameFocusCaptureMouse ? "true" : "false");
 
+  json.append(",\"pine\":");
+  json.append(_pineEnabled ? "true" : "false");
+  json.append(",\"pineSlot\":");
+  json.append(std::to_string(_pineSlot));
+
   const char* comma = "";
   json.append(",\"romFolders\":{");
   for (const auto& pair : _romFolders)
@@ -758,6 +766,8 @@ bool Config::deserializeEmulatorSettings(const char* json)
           ud->self->_showSpeedIndicator = num != 0;
         else if (ud->key == "gameFocusCaptureMouse")
           ud->self->_gameFocusCaptureMouse = num != 0;
+        else if (ud->key == "pine")
+          ud->self->_pineEnabled = num != 0;
         break;
 
       case JSONSAX_NUMBER:
@@ -769,6 +779,11 @@ bool Config::deserializeEmulatorSettings(const char* json)
           else if (value > 10)
             value = 10;
           ud->self->_fastForwardRatio = value;
+        }
+        else if (ud->key == "pineSlot")
+        {
+          const auto value = strtoul(str, NULL, 10);
+          ud->self->_pineSlot = (value >= 1 && value <= 65535) ? (unsigned)value : Pine::kDefaultSlot;
         }
         break;
 
@@ -1232,6 +1247,17 @@ void Config::showEmulatorSettingsDialog()
   db.addCheckbox("Capture mouse in Game Focus mode", 51005, 0, y, WIDTH - 10, 8, &gameFocusCaptureMouse);
   y += LINE;
 
+  // (not in hardcore, see Application::pollPine)
+  bool pine = _pineEnabled;
+  db.addCheckbox("PINE: scripts can access the memory", 51006, 0, y, WIDTH - 10, 8, &pine);
+  y += LINE;
+
+  char pineSlot[8];
+  snprintf(pineSlot, sizeof(pineSlot), "%u", _pineSlot);
+  db.addLabel("PINE Slot", 51008, 0, y, 50, 8);
+  db.addEditbox(51007, 55, y - 2, 40, 12, 1, pineSlot, sizeof(pineSlot), false);
+  y += LINE;
+
   db.addButton("OK", IDOK, WIDTH - 55 - 50, y, 50, 14, true);
   db.addButton("Cancel", IDCANCEL, WIDTH - 50, y, 50, 14, false);
 
@@ -1241,6 +1267,11 @@ void Config::showEmulatorSettingsDialog()
     _fastForwardRatio = fastForwardRatio + 2;
     _showSpeedIndicator = showSpeedIndicator;
     _gameFocusCaptureMouse = gameFocusCaptureMouse;
+    _pineEnabled = pine;
+
+    const auto slot = strtoul(pineSlot, NULL, 10);
+    if (slot >= 1 && slot <= 65535)
+      _pineSlot = (unsigned)slot;
   }
 }
 #endif

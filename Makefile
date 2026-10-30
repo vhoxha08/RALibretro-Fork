@@ -53,7 +53,7 @@ else
   CXXFLAGS += -DLOG_TO_FILE
 endif
 
-LDFLAGS += -mwindows -lmingw32 -lopengl32 -lwinhttp -lgdi32 -limm32 -lcomdlg32
+LDFLAGS += -mwindows -lmingw32 -lopengl32 -lwinhttp -lgdi32 -limm32 -lcomdlg32 -lws2_32
 LDFLAGS += -L${SDLLIBDIR} -lSDL2main -lSDL2
 
 # main
@@ -70,6 +70,7 @@ OBJS=\
 	src/components/Input.o \
 	src/components/Logger.o \
 	src/components/Microphone.o \
+	src/components/Pine.o \
 	src/components/Video.o \
 	src/components/VideoContext.o \
 	src/libmincrypt/sha256.o \
