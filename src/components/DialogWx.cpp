@@ -37,6 +37,25 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <cstring>
 
+#ifdef __WXGTK__
+#include <gtk/gtk.h>
+
+// GTK's buttons and text fields are taller than the areas the dialog templates give them (Windows' are smaller):
+// without the minimum height and the padding, they fit (i.e. the key binding dialog's buttons and fields, one
+// right below the other, would otherwise overlap)
+static void makeCompact(wxWindow* widget)
+{
+  static GtkCssProvider* const provider = []() {
+    GtkCssProvider* css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css, "* { min-height: 0; padding-top: 0; padding-bottom: 0; }", -1, nullptr);
+    return css;
+  }();
+
+  gtk_style_context_add_provider(gtk_widget_get_style_context(static_cast<GtkWidget*>(widget->GetHandle())),
+                                 GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+#endif
+
 Dialog::Dialog() = default;
 Dialog::~Dialog() = default;
 
@@ -251,10 +270,9 @@ public:
     // go nowhere (not even to the dialog) when nothing has it. Unless a text field takes them, keys go to an
     // invisible control (i.e. the key binding dialog has nothing but buttons).
     _keyCatcher = new KeyCatcher(this);
-    bool hasTextField = false;
     for (const auto& cd : _dialog._controlData)
-      hasTextField = hasTextField || (cd._type == Dialog::kEditbox && !cd._readOnly);
-    if (!hasTextField)
+      _hasTextField = _hasTextField || (cd._type == Dialog::kEditbox && !cd._readOnly);
+    if (!_hasTextField)
       _keyCatcher->SetFocus();
 
     // like a Win32 dialog: Enter presses the default button (done by wx), Escape cancels. The dialog sees keys
@@ -267,6 +285,15 @@ public:
       afterHook();
     });
     _timer.Start(16);
+  }
+
+  // Takes the keyboard back after a dialog opened from this one closed (i.e. the key binding dialog after a key
+  // was bound).
+  void reactivate()
+  {
+    Raise();
+    if (!_hasTextField)
+      _keyCatcher->SetFocus();
   }
 
 private:
@@ -369,8 +396,15 @@ private:
       else if (!multiLine)
       {
         const int height = widget->GetBestSize().y;
-        rect.y += (rect.height - height) / 2;
-        rect.height = height;
+#ifdef __WXGTK__
+        if (height > rect.height && (cd._type == Dialog::kButton || cd._type == Dialog::kEditbox))
+          makeCompact(widget); // it takes the area it has (and shows its text in the middle of it)
+        else
+#endif
+        {
+          rect.y += (rect.height - height) / 2;
+          rect.height = height;
+        }
       }
 
       widget->SetSize(rect);
@@ -501,6 +535,7 @@ private:
   Dialog& _dialog;
   std::vector<wxWindow*> _widgets;
   KeyCatcher* _keyCatcher = nullptr;
+  bool _hasTextField = false;
   wxTimer _timer;
   bool _syncing = false;
 };
@@ -523,11 +558,20 @@ bool Dialog::show()
   _result = 0;
   initControls();
 
+  // a dialog opened from another one belongs to it, so that one is active again when it closes (not the main window)
+  static DialogWindow* s_openWindow = nullptr;
+  DialogWindow* const outer = s_openWindow;
+
   {
-    DialogWindow window(*this, static_cast<wxWindow*>(g_mainWindow));
+    DialogWindow window(*this, outer ? static_cast<wxWindow*>(outer) : static_cast<wxWindow*>(g_mainWindow));
     window.CentreOnParent();
+    s_openWindow = &window;
     window.ShowModal();
+    s_openWindow = outer;
   }
+
+  if (outer)
+    outer->reactivate();
 
   markClosed();
 

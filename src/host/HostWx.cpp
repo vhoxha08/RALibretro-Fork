@@ -81,6 +81,8 @@ extern "C" int XInitThreads(void);
 
 #include <gdk/gdk.h>
 #include <glib.h>
+#include <gtk/gtk.h>
+extern "C" GdkVisual* gdk_x11_screen_lookup_visual(GdkScreen* screen, unsigned long visualId); // (gdk/gdkx.h)
 #include <wx/bitmap.h>
 #include <wx/icon.h>
 #include <wx/image.h>
@@ -296,11 +298,54 @@ namespace
   class GameCanvas : public wxGLCanvas
   {
   public:
+#if !defined(__APPLE__) && wxUSE_GLCANVAS_EGL
+    // Under X11, the window must have the visual of the EGLConfig to make an EGL surface for it with NVIDIA's driver
+    // (Mesa's doesn't mind), or nothing is drawn. wxWidgets only sets the window's visual for GLX: set it before the
+    // window is made.
+    void useEglVisual()
+    {
+      GdkScreen* screen = gtk_widget_get_screen(m_wxwindow);
+      const GType x11Display = g_type_from_name("GdkX11Display");
+      if (x11Display == 0 || !G_TYPE_CHECK_INSTANCE_TYPE(gdk_screen_get_display(screen), x11Display))
+        return;
+
+      EGLint visualId = 0;
+      if (GetEGLConfig() == nullptr ||
+          !eglGetConfigAttrib(wxGLCanvasEGL::GetDisplay(), *GetEGLConfig(), EGL_NATIVE_VISUAL_ID, &visualId) ||
+          visualId == 0)
+      {
+        return;
+      }
+
+      GdkVisual* visual = gdk_x11_screen_lookup_visual(screen, (unsigned long)visualId);
+      if (visual != nullptr)
+        gtk_widget_set_visual(m_wxwindow, visual);
+    }
+#endif
+
+#ifdef __WXGTK__
+    // no input method: the game takes keys, not text. With one, the desktop's input method may hold a key's press
+    // back until it's released (i.e. Plasma's, for the letters with accents it offers when a key is held), and the
+    // game never sees the key down.
+    void GTKHandleRealized() override
+    {
+      wxGLCanvas::GTKHandleRealized();
+
+      if (m_imContext)
+      {
+        g_object_unref(m_imContext);
+        m_imContext = nullptr;
+      }
+    }
+#endif
+
     GameCanvas(wxWindow* parent, const wxGLAttributes& attributes) :
       wxGLCanvas(parent, attributes, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxFULL_REPAINT_ON_RESIZE | wxWANTS_CHARS)
     {
 #ifdef __APPLE__
       hostmac::prepareGLView(GetHandle());
+#elif wxUSE_GLCANVAS_EGL
+      useEglVisual();
 #endif
 
       // the game takes the keys as they are (no text input), so they don't go on to become characters

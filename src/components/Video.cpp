@@ -1150,8 +1150,10 @@ GLuint Video::createTexture(unsigned width, unsigned height, retro_pixel_format 
   switch (pixelFormat)
   {
   case RETRO_PIXEL_FORMAT_XRGB8888:
-    texture = GlUtil::createTexture(width, height, GL_RGBA, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, filter);
-    format = "RGBA8888";
+    // no alpha: the X byte is whatever the core left there (usually 0), and the window's alpha is the image's where
+    // it's shown (a compositor blends a window with alpha 0 with what's behind it, making the image look brighter)
+    texture = GlUtil::createTexture(width, height, GL_RGB, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, filter);
+    format = "XRGB8888";
     break;
 
   case RETRO_PIXEL_FORMAT_RGB565:
