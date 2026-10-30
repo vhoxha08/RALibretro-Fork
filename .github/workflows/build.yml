@@ -31,21 +31,46 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v7
       with:
-        submodules: recursive
         # the version comes from the tags (git describe)
         fetch-depth: 0
 
-    - name: Fetch RAIntegration's tags
-      run: git -C src/RAIntegration fetch --quiet --tags origin
+    - name: Submodules
+      run: |
+        # without their history (i.e. wxWidgets' is large), except RAIntegration's: its version comes from its tags
+        git submodule update --init --recursive --depth 1 --jobs 8
+        git -C src/RAIntegration fetch --quiet --unshallow --tags origin
 
     - name: Install dependencies
-      run: brew install ninja sdl2-compat
+      run: brew install ninja sdl2-compat ccache
+
+    - name: Compiler cache settings
+      run: |
+        # the objects of unchanged sources (i.e. all of wxWidgets) come from the previous builds' (see the next step)
+        echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+        echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+        echo "CCACHE_COMPRESS=true" >> "$GITHUB_ENV"
+        echo "CCACHE_MAXSIZE=500M" >> "$GITHUB_ENV"
+        # (RAIntegration's precompiled header)
+        echo "CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime" >> "$GITHUB_ENV"
+
+    - name: Compiler cache
+      uses: actions/cache@v6
+      with:
+        path: .ccache
+        # a new one each run (a cache can't be updated), from the newest
+        key: ccache-macOS-${{ github.run_id }}
+        restore-keys: ccache-macOS-
 
     - name: Configure
-      run: cmake -B build-release.noindex -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET
+      run: |
+        cmake -B build-release.noindex -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache
 
     - name: Build
-      run: ninja -C build-release.noindex RALibretro
+      run: |
+        ninja -C build-release.noindex RALibretro
+        ccache --show-stats
 
     - name: Package
       id: package
@@ -73,25 +98,48 @@ jobs:
         apt-get update
         DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build git pkg-config file curl \
           ca-certificates libgtk-3-dev libsdl2-dev libcurl4-openssl-dev libgl-dev libegl-dev libx11-dev \
-          libwayland-dev wayland-protocols libxkbcommon-dev zlib1g-dev
+          libwayland-dev wayland-protocols libxkbcommon-dev zlib1g-dev ccache
 
     - name: Checkout
       uses: actions/checkout@v7
       with:
-        submodules: recursive
         fetch-depth: 0
 
-    - name: Fetch RAIntegration's tags
+    - name: Submodules
       run: |
         # (the checkout belongs to another user than the container's)
         git config --global --add safe.directory '*'
-        git -C src/RAIntegration fetch --quiet --tags origin
+        # without their history (i.e. wxWidgets' is large), except RAIntegration's: its version comes from its tags
+        git submodule update --init --recursive --depth 1 --jobs 8
+        git -C src/RAIntegration fetch --quiet --unshallow --tags origin
+
+    - name: Compiler cache settings
+      run: |
+        # the objects of unchanged sources (i.e. all of wxWidgets) come from the previous builds' (see the next step)
+        echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+        echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+        echo "CCACHE_COMPRESS=true" >> "$GITHUB_ENV"
+        echo "CCACHE_MAXSIZE=500M" >> "$GITHUB_ENV"
+        # (RAIntegration's precompiled header)
+        echo "CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime" >> "$GITHUB_ENV"
+
+    - name: Compiler cache
+      uses: actions/cache@v6
+      with:
+        path: .ccache
+        # a new one each run (a cache can't be updated), from the newest
+        key: ccache-Linux-${{ github.run_id }}
+        restore-keys: ccache-Linux-
 
     - name: Configure
-      run: cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+      run: |
+        cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     - name: Build
-      run: ninja -C build-release RALibretro
+      run: |
+        ninja -C build-release RALibretro
+        ccache --show-stats
 
     - name: Package
       id: package
@@ -113,8 +161,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v7
       with:
-        submodules: recursive
         fetch-depth: 0
+
+    - name: Submodules
+      shell: bash
+      run: |
+        # without their history, and without RAIntegration: the application downloads RA_Integration.dll itself
+        git -c submodule.src/RAIntegration.update=none submodule update --init --recursive --depth 1 --jobs 8
 
     - name: Only version tags
       shell: bash
