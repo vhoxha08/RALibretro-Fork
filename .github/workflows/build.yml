@@ -103,7 +103,8 @@ jobs:
         apt-get update
         DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake ninja-build git pkg-config file curl \
           ca-certificates libgtk-3-dev libsdl2-dev libcurl4-openssl-dev libgl-dev libegl-dev libx11-dev \
-          libwayland-dev wayland-protocols libxkbcommon-dev zlib1g-dev ccache
+          libwayland-dev wayland-protocols libxkbcommon-dev zlib1g-dev ccache \
+          libgtk-3-bin adwaita-icon-theme # (the AppImage's icons: gtk-encode-symbolic-svg, Adwaita's)
 
     - name: Checkout
       uses: actions/checkout@v7

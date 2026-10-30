@@ -99,6 +99,25 @@ extern "C" GdkVisual* gdk_x11_screen_lookup_visual(GdkScreen* screen, unsigned l
 // RALibretro.desktop, whose icon the task bar shows.
 static const char* const s_appId = "RALibretro";
 
+// Without an SVG loader (i.e. the AppImage's GTK), the icons of a theme that only has SVG ones (i.e. KDE's Breeze)
+// can't be shown, like the menus' arrows: the AppImage has Adwaita's as PNG, in the RALibretro icon theme (see
+// etc/linux/make-appimage.sh).
+static void useIconsWithoutSvg()
+{
+  bool svg = false;
+  GSList* formats = gdk_pixbuf_get_formats();
+  for (GSList* format = formats; format != nullptr; format = format->next)
+  {
+    gchar* name = gdk_pixbuf_format_get_name(static_cast<GdkPixbufFormat*>(format->data));
+    svg = svg || strcmp(name, "svg") == 0;
+    g_free(name);
+  }
+  g_slist_free(formats);
+
+  if (!svg)
+    g_object_set(gtk_settings_get_default(), "gtk-icon-theme-name", "RALibretro", nullptr);
+}
+
 // Run as an AppImage (its runtime sets APPIMAGE to its path), RALibretro writes that desktop file and the icon in the
 // user's data folder, so the desktop shows its icon and lists it, like AppImage integration tools do. They're written
 // again when the AppImage moved.
@@ -713,6 +732,7 @@ bool host::init(int argc, char* argv[])
   gdk_set_program_class(s_appId);
   wxTheApp->SetAppName(s_appId); // (its dialogs' titles)
   integrateAppImage();
+  useIconsWithoutSvg();
 #endif
 
   // a failed assertion is logged instead of blocking the game with a dialog

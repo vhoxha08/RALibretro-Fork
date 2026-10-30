@@ -97,6 +97,39 @@ while [ $changed -eq 1 ]; do
     fi
   done
 done
+
+# Without an SVG loader, GTK can't show an icon theme's SVG icons (i.e. all of KDE's Breeze), like the menus' arrows:
+# Adwaita's icons as PNG (the symbolic ones made from its SVG ones), the icon theme RALibretro then uses (see
+# useIconsWithoutSvg in src/host/HostWx.cpp)
+adwaita=/usr/share/icons/Adwaita
+theme="$appdir/usr/share/icons/RALibretro"
+# 16 and 24 pixels, and twice that for displays scaled 200% (i.e. 4K ones): <size>@2
+for size in 16 24; do
+  for scale in 1 2; do
+    pixels="$((size * scale))x$((size * scale))"
+    name="${size}x${size}"
+    [ $scale -eq 1 ] || name="$name@$scale"
+    for svg in "$adwaita"/scalable/*/*-symbolic.svg; do
+      dir="$theme/$name/$(basename "$(dirname "$svg")")"
+      mkdir -p "$dir"
+      gtk-encode-symbolic-svg -o "$dir" "$svg" "$pixels" || echo "not encoded: $svg" >&2
+    done
+    # the colored ones (i.e. the file dialogs' folders) are PNG already
+    (cd "$adwaita/$pixels" && find . -name '*.png' ! -name '*.symbolic.png') | while read -r png; do
+      mkdir -p "$theme/$name/$(dirname "$png")"
+      cp "$adwaita/$pixels/$png" "$theme/$name/$png"
+    done
+  done
+done
+dirs="$(cd "$theme" && find . -mindepth 2 -maxdepth 2 -type d | sed 's|^\./||' | sort)"
+{
+  printf '[Icon Theme]\nName=RALibretro\nInherits=hicolor\nDirectories=%s\n' "$(echo $dirs | tr ' ' ',')"
+  for dir in $dirs; do
+    case "$dir" in *@2/*) scale=2 ;; *) scale=1 ;; esac
+    printf '\n[%s]\nSize=%s\nScale=%s\nType=Fixed\n' "$dir" "${dir%%x*}" "$scale"
+  done
+} > "$theme/index.theme"
+
 summary="AppDir: ${before} MB -> $(du -sm "$appdir" | cut -f1) MB; removed librsvg and ${removed[*]:-nothing else}"
 echo "$summary"
 if [ -n "${GITHUB_ACTIONS:-}" ]; then
