@@ -398,7 +398,14 @@ private:
         const int height = widget->GetBestSize().y;
 #ifdef __WXGTK__
         if (height > rect.height && (cd._type == Dialog::kButton || cd._type == Dialog::kEditbox))
+        {
           makeCompact(widget); // it takes the area it has (and shows its text in the middle of it)
+
+          // a little smaller, like macOS' buttons in their area, so it doesn't touch what's next to it (i.e. the
+          // About dialog's log): not the key binding dialog's, which have just the room for their text
+          if (cd._type == Dialog::kButton && cd._h >= 14)
+            rect.Deflate(0, rect.height / 8);
+        }
         else
 #endif
         {
