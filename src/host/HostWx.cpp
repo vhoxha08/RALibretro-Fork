@@ -296,6 +296,22 @@ namespace
   class GameCanvas : public wxGLCanvas
   {
   public:
+#ifdef __WXGTK__
+    // no input method: the game takes keys, not text. With one, the desktop's input method may hold a key's press
+    // back until it's released (i.e. Plasma's, for the letters with accents it offers when a key is held), and the
+    // game never sees the key down.
+    void GTKHandleRealized() override
+    {
+      wxGLCanvas::GTKHandleRealized();
+
+      if (m_imContext)
+      {
+        g_object_unref(m_imContext);
+        m_imContext = nullptr;
+      }
+    }
+#endif
+
     GameCanvas(wxWindow* parent, const wxGLAttributes& attributes) :
       wxGLCanvas(parent, attributes, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxFULL_REPAINT_ON_RESIZE | wxWANTS_CHARS)
     {
