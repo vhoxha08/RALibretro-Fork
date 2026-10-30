@@ -77,6 +77,62 @@ jobs:
         ninja -C build-release.noindex RALibretro
         ccache --show-stats
 
+    - name: Signing
+      # with a Developer ID certificate and an App Store Connect API key in the repository's secrets, the application
+      # is signed and notarized (see etc/macos/sign.sh); without them (i.e. forks), it stays signed ad hoc
+      id: signing
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      run: echo "enabled=$([ -n "$MACOS_CERTIFICATE" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+    - name: Sign
+      if: steps.signing.outputs.enabled == 'true'
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }} # the certificate and its private key (.p12), in base64
+        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      run: |
+        # a keychain of its own for the certificate (deleted at the end, see below)
+        keychain="$RUNNER_TEMP/signing.keychain-db"
+        password="$(openssl rand -hex 16)"
+        security create-keychain -p "$password" "$keychain"
+        security set-keychain-settings -lut 3600 "$keychain"
+        security unlock-keychain -p "$password" "$keychain"
+        echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+        security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+        rm "$RUNNER_TEMP/certificate.p12"
+        # codesign uses the key without asking
+        security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+        security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+        identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -n 1)"
+        etc/macos/sign.sh build-release.noindex/RALibretro.app "$identity"
+
+    - name: Notarize
+      if: steps.signing.outputs.enabled == 'true'
+      env:
+        NOTARY_KEY: ${{ secrets.NOTARY_KEY }} # the App Store Connect API key (.p8), in base64
+        NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+        NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+      run: |
+        echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+        key=(--key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER")
+        ditto -c -k --keepParent build-release.noindex/RALibretro.app "$RUNNER_TEMP/notarize.zip"
+        xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${key[@]}" --wait --output-format json > "$RUNNER_TEMP/notarization.json"
+        status="$(plutil -extract status raw "$RUNNER_TEMP/notarization.json")"
+        if [ "$status" != Accepted ]; then
+          echo "::error title=Notarization::$status"
+          xcrun notarytool log "$(plutil -extract id raw "$RUNNER_TEMP/notarization.json")" "${key[@]}"
+          exit 1
+        fi
+        # the notarization's ticket in the bundle: it opens without asking Apple (i.e. offline)
+        xcrun stapler staple build-release.noindex/RALibretro.app
+        spctl --assess --type execute --verbose=2 build-release.noindex/RALibretro.app
+
+    - name: Remove the signing keychain
+      if: always() && steps.signing.outputs.enabled == 'true'
+      run: |
+        security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+        rm -f "$RUNNER_TEMP/notary.p8"
+
     - name: Package
       id: package
       run: |
