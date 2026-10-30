@@ -251,10 +251,9 @@ public:
     // go nowhere (not even to the dialog) when nothing has it. Unless a text field takes them, keys go to an
     // invisible control (i.e. the key binding dialog has nothing but buttons).
     _keyCatcher = new KeyCatcher(this);
-    bool hasTextField = false;
     for (const auto& cd : _dialog._controlData)
-      hasTextField = hasTextField || (cd._type == Dialog::kEditbox && !cd._readOnly);
-    if (!hasTextField)
+      _hasTextField = _hasTextField || (cd._type == Dialog::kEditbox && !cd._readOnly);
+    if (!_hasTextField)
       _keyCatcher->SetFocus();
 
     // like a Win32 dialog: Enter presses the default button (done by wx), Escape cancels. The dialog sees keys
@@ -267,6 +266,15 @@ public:
       afterHook();
     });
     _timer.Start(16);
+  }
+
+  // Takes the keyboard back after a dialog opened from this one closed (i.e. the key binding dialog after a key
+  // was bound).
+  void reactivate()
+  {
+    Raise();
+    if (!_hasTextField)
+      _keyCatcher->SetFocus();
   }
 
 private:
@@ -501,6 +509,7 @@ private:
   Dialog& _dialog;
   std::vector<wxWindow*> _widgets;
   KeyCatcher* _keyCatcher = nullptr;
+  bool _hasTextField = false;
   wxTimer _timer;
   bool _syncing = false;
 };
@@ -523,11 +532,20 @@ bool Dialog::show()
   _result = 0;
   initControls();
 
+  // a dialog opened from another one belongs to it, so that one is active again when it closes (not the main window)
+  static DialogWindow* s_openWindow = nullptr;
+  DialogWindow* const outer = s_openWindow;
+
   {
-    DialogWindow window(*this, static_cast<wxWindow*>(g_mainWindow));
+    DialogWindow window(*this, outer ? static_cast<wxWindow*>(outer) : static_cast<wxWindow*>(g_mainWindow));
     window.CentreOnParent();
+    s_openWindow = &window;
     window.ShowModal();
+    s_openWindow = outer;
   }
+
+  if (outer)
+    outer->reactivate();
 
   markClosed();
 
