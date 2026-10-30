@@ -37,6 +37,25 @@ along with RALibretro.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <cstring>
 
+#ifdef __WXGTK__
+#include <gtk/gtk.h>
+
+// GTK's buttons and text fields are taller than the areas the dialog templates give them (Windows' are smaller):
+// without the minimum height and the padding, they fit (i.e. the key binding dialog's buttons and fields, one
+// right below the other, would otherwise overlap)
+static void makeCompact(wxWindow* widget)
+{
+  static GtkCssProvider* const provider = []() {
+    GtkCssProvider* css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css, "* { min-height: 0; padding-top: 0; padding-bottom: 0; }", -1, nullptr);
+    return css;
+  }();
+
+  gtk_style_context_add_provider(gtk_widget_get_style_context(static_cast<GtkWidget*>(widget->GetHandle())),
+                                 GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+#endif
+
 Dialog::Dialog() = default;
 Dialog::~Dialog() = default;
 
@@ -377,8 +396,15 @@ private:
       else if (!multiLine)
       {
         const int height = widget->GetBestSize().y;
-        rect.y += (rect.height - height) / 2;
-        rect.height = height;
+#ifdef __WXGTK__
+        if (height > rect.height && (cd._type == Dialog::kButton || cd._type == Dialog::kEditbox))
+          makeCompact(widget); // it takes the area it has (and shows its text in the middle of it)
+        else
+#endif
+        {
+          rect.y += (rect.height - height) / 2;
+          rect.height = height;
+        }
       }
 
       widget->SetSize(rect);
