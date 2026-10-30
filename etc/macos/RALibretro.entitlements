@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- What the hardened runtime (which notarization requires) still allows RALibretro (see sign.sh) -->
+<plist version="1.0">
+<dict>
+	<!-- the cores are downloaded (buildbot.libretro.com), not signed with RALibretro's certificate -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+	<!-- cores that compile the emulated code (dynamic recompilers) -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+</dict>
+</plist>
