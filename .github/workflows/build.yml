@@ -52,6 +52,9 @@ jobs:
         echo "CCACHE_MAXSIZE=500M" >> "$GITHUB_ENV"
         # (RAIntegration's precompiled header)
         echo "CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime" >> "$GITHUB_ENV"
+        # the compiler by its version, not its file: the runners' images (i.e. their macOS version) differ, and so does
+        # the file's time, which made every object a miss
+        echo "CCACHE_COMPILERCHECK=%compiler% --version" >> "$GITHUB_ENV"
 
     - name: Compiler cache
       uses: actions/cache@v6
@@ -63,9 +66,11 @@ jobs:
 
     - name: Configure
       run: |
+        # (-fno-pch-timestamp: Clang puts the time in a precompiled header, which made RAIntegration's objects misses)
         cmake -B build-release.noindex -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_FLAGS="-Xclang -fno-pch-timestamp"
 
     - name: Build
       run: |
