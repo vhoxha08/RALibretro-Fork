@@ -78,8 +78,8 @@ ninja -C build-release RALibretro
 etc/linux/make-appimage.sh build-release   # RALibretro-x86_64.AppImage (downloads linuxdeploy the first time)
 ```
 
-The AppImage uses Wayland when there is one. Under X11 with NVIDIA's driver the game stays black (wxWidgets can't make
-an EGL surface for the window there); Wayland works with it. The data goes to `~/.local/share/RALibretro`, like
+The AppImage uses Wayland when there is one, X11 otherwise (both work with NVIDIA's driver). The data goes to
+`~/.local/share/RALibretro`, like
 `~/Library/Application Support/RALibretro` on macOS (below).
 
 ### Where the data goes
