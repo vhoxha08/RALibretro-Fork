@@ -33,6 +33,10 @@ public:
 
   void attachToCore(libretro::Core* core, int consoleId);
 
+  // RetroAchievements addresses (i.e. for PINE): false if any of the bytes isn't mapped
+  bool read(uint32_t address, uint8_t* buffer, uint32_t size) const;
+  bool write(uint32_t address, const uint8_t* buffer, uint32_t size);
+
 protected:
   void installMemoryBanks();
 

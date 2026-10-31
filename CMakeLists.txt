@@ -111,6 +111,7 @@ add_executable(RALibretro
   src/components/Input.cpp
   src/components/Logger.cpp
   src/components/Microphone.cpp
+  src/components/Pine.cpp
   src/components/Video.cpp
   src/components/VideoContext.cpp
   src/dynlib/dynlib.c

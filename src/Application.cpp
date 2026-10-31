@@ -699,6 +699,7 @@ void Application::runSmoothed()
     runPendingCommand();
     applyAudioRequests();
 #endif
+    pollPine();
     if (_fsm.currentState() != Fsm::State::GameRunning)
       return;
 
@@ -777,6 +778,7 @@ void Application::run()
       runPendingCommand();
       applyAudioRequests();
 #endif
+      pollPine();
 
       switch (_fsm.currentState())
       {
@@ -924,6 +926,7 @@ void Application::destroy()
 {
   _logger.info(TAG "begin shutdown");
 
+  _pine.stop();
   saveConfiguration();
 
   RA_Shutdown();
@@ -1640,6 +1643,119 @@ void Application::resetGame()
 bool Application::hardcore()
 {
   return RA_HardcoreModeIsActive();
+}
+
+// What PINE's requests act on: the loaded game (without one, its memory can't be read nor its state saved)
+class PineTarget : public Pine::Target
+{
+public:
+  explicit PineTarget(Application& app) : _app(app) {}
+
+  virtual bool read(uint32_t address, uint8_t* buffer, uint32_t size) override
+  {
+    return _app.isGameActive() && _app._memory.read(address, buffer, size);
+  }
+
+  virtual bool write(uint32_t address, const uint8_t* buffer, uint32_t size) override
+  {
+    return _app.isGameActive() && _app._memory.write(address, buffer, size);
+  }
+
+  virtual std::string version() override { return std::string("RALibretro ") + RA_LIBRETRO_VERSION; }
+  virtual std::string title() override { return _app.isGameActive() ? util::fileName(_app._gameFileName) : ""; }
+
+  // the game's RetroAchievements ID and hash
+  virtual std::string id() override { return activeGameId() != 0 ? std::to_string(activeGameId()) : ""; }
+  virtual std::string uuid() override { return activeGameHash(); }
+
+  // (the core's name and version: the content has no version of its own)
+  virtual std::string gameVersion() override
+  {
+    const auto* info = _app._core.getSystemInfo();
+    if (!_app.isGameActive() || info == NULL || info->library_name == NULL)
+      return "";
+
+    std::string version = info->library_name;
+    if (info->library_version != NULL)
+      version.append(" ").append(info->library_version);
+    return version;
+  }
+
+  virtual Pine::Status status() override
+  {
+    if (_app.isPaused())
+      return Pine::Status::Paused;
+
+    return _app.isGameActive() ? Pine::Status::Running : Pine::Status::Shutdown;
+  }
+
+  virtual bool saveState(uint8_t slot) override { return _app.isGameActive() && _app.saveStateSlot(slot); }
+  virtual bool loadState(uint8_t slot) override { return _app.isGameActive() && _app.loadStateSlot(slot); }
+
+protected:
+  Application& _app;
+};
+
+void Application::pollPine()
+{
+  // enabled, and not in hardcore (where programs reading or changing the memory aren't allowed)
+  const bool wanted = _config.getPineEnabled() && !hardcore();
+  const unsigned slot = _config.getPineSlot();
+
+  if (!wanted)
+  {
+    _pine.stop();
+    _pineFailedSlot = 0;
+    return;
+  }
+
+  if (!_pine.isRunning() || _pine.slot() != slot)
+  {
+    if (_pineFailedSlot == slot)
+      return;
+
+    if (!_pine.start(slot, &_logger))
+    {
+      _pineFailedSlot = slot;
+      return;
+    }
+    _pineFailedSlot = 0;
+  }
+
+  PineTarget target(*this);
+  _pine.poll(target);
+}
+
+bool Application::saveStateSlot(unsigned ndx)
+{
+  // (0 opens a file dialog)
+  if (ndx == 0 || !_states.saveState(ndx))
+    return false;
+
+  char message[128];
+  snprintf(message, sizeof(message), "Saved state %u", ndx);
+  _video.showMessage(message, 60);
+
+  if (ndx <= 10)
+  {
+    _validSlots |= 1 << ndx;
+    enableSlots();
+  }
+
+  return true;
+}
+
+bool Application::loadStateSlot(unsigned ndx)
+{
+  if (ndx == 0 || !_states.existsState(ndx) || !_states.loadState(ndx))
+    return false;
+
+  char message[128];
+  snprintf(message, sizeof(message), "Loaded state %u", ndx);
+  _video.showMessage(message, 60);
+
+  updateDiscMenu(false);
+  return true;
 }
 
 bool Application::unloadGame()

@@ -40,3 +40,7 @@ namespace libretro
 
 bool   romLoaded(libretro::Core* core, Logger* logger, int consoleId, const std::string& path, void* rom, size_t size, bool changingDiscs);
 void   romUnloaded(Logger* logger);
+
+// the loaded game's RetroAchievements ID (0 if unknown) and hash ("" if none)
+unsigned    activeGameId();
+const char* activeGameHash();

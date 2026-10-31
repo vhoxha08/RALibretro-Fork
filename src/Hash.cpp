@@ -47,6 +47,7 @@ void initHash3DS(const std::string& systemDir); /* in Hash3DS.cpp */
 
 //  Manages multi-disc games
 static int g_activeGame = 0;
+static char g_activeHash[33] = ""; // the loaded game's (not the current disc's)
 static rc_libretro_hash_set_t g_hashSet;
 
 static void rhash_display_error_message(const char* message)
@@ -194,6 +195,7 @@ bool romLoaded(libretro::Core* core, Logger* logger, int system, const std::stri
   {
     /* when not changing discs, just activate the new game */
     g_activeGame = gameId;
+    memcpy(g_activeHash, hash, sizeof(hash));
     RA_ActivateGame(gameId);
   }
   else if (gameId != 0)
@@ -223,5 +225,16 @@ void romUnloaded(Logger* logger)
 {
   rc_libretro_hash_set_destroy(&g_hashSet);
   g_activeGame = 0;
+  g_activeHash[0] = '\0';
   RA_ActivateGame(0);
+}
+
+unsigned activeGameId()
+{
+  return (unsigned)g_activeGame;
+}
+
+const char* activeGameHash()
+{
+  return g_activeHash;
 }

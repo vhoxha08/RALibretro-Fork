@@ -264,6 +264,26 @@ bool Memory::init(libretro::LoggerComponent* logger)
   return true;
 }
 
+bool Memory::read(uint32_t address, uint8_t* buffer, uint32_t size) const
+{
+  return rc_libretro_memory_read(&g_memoryRegions, address, buffer, size) == size;
+}
+
+bool Memory::write(uint32_t address, const uint8_t* buffer, uint32_t size)
+{
+  // all of it or nothing
+  for (uint32_t i = 0; i < size; i++)
+  {
+    if (rc_libretro_memory_find(&g_memoryRegions, address + i) == NULL)
+      return false;
+  }
+
+  for (uint32_t i = 0; i < size; i++)
+    *rc_libretro_memory_find(&g_memoryRegions, address + i) = buffer[i];
+
+  return true;
+}
+
 void Memory::destroy()
 {
   rc_libretro_memory_destroy(&g_memoryRegions);
